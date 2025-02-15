@@ -248,9 +248,21 @@ fig.update_xaxes(
     tickvals=[0, 30, 60, 90]
 )
 
+# Calculate y-axis ranges with padding
+def get_axis_range(df, padding_percent=0.15):
+    min_val = df[dates + ['reference']].min().min()
+    max_val = df[dates + ['reference']].max().max()
+    range_val = max_val - min_val
+    padding = range_val * padding_percent
+    return [min_val - padding, max_val + padding]
+
+# Update y-axes with calculated ranges
+glucose_range = get_axis_range(glucose_df)
+insulin_range = get_axis_range(insulin_df)
+
 fig.update_yaxes(
     title_text="Glucose (mg/dL)", 
-    range=[80, 180],  # Increased upper limit to accommodate labels
+    range=glucose_range,
     title_font=dict(family="Avenir"), 
     tickfont=dict(family="Avenir"), 
     row=1, 
@@ -258,7 +270,7 @@ fig.update_yaxes(
 )
 fig.update_yaxes(
     title_text="Insulin (µU/mL)", 
-    range=[0, 120],  # Adjusted range for insulin plot
+    range=insulin_range,
     title_font=dict(family="Avenir"), 
     tickfont=dict(family="Avenir"), 
     row=2, 
@@ -285,8 +297,6 @@ with st.container():
             )
     else:
         st.info("To enable PNG download, install the kaleido package using: pip install kaleido")
-
-
 
 # Metrics in containers
 st.markdown('<p class="subtitle">Analysis</p>', unsafe_allow_html=True)
