@@ -68,11 +68,8 @@ def process_data(df):
     insulin_df = df[df['type'] == 'insulin'].copy()
     return dates, glucose_df, insulin_df
 
-# Load data
-if uploaded_file:
-    df = pd.read_csv(uploaded_file, header=0)
-    st.session_state.df = df
-elif st.session_state.df is None:
+# Initialize session state if 'df' doesn't exist
+if 'df' not in st.session_state:
     # Sample data
     data = {
         'time': [0, 30, 60, 90] * 2,
@@ -82,6 +79,11 @@ elif st.session_state.df is None:
         'reference': [90, 140, 120, 100] + [6, 40, 30, 20]
     }
     st.session_state.df = pd.DataFrame(data)
+
+# Handle file upload
+if uploaded_file:
+    df = pd.read_csv(uploaded_file, header=0)
+    st.session_state.df = df
 
 # Process data
 dates, glucose_df, insulin_df = process_data(st.session_state.df)
