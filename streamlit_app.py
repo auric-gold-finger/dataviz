@@ -60,14 +60,29 @@ with st.sidebar:
     line_width = st.slider("Line Width", 1, 5, 2)
 
 def process_data(df):
-    # Rename columns appropriately
-    df.columns = ['time', 'type', 'Sept 2022', 'Feb 2025', 'reference']
+    # Get all column names except time, type, and reference
     dates = [col for col in df.columns if col not in ['time', 'type', 'reference']]
-    dates.sort(reverse=True)
+    
+    # Parse dates to handle sorting
+    def parse_date(date_str):
+        months = {
+            'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
+            'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12
+        }
+        try:
+            month_str, year_str = date_str.split()
+            return int(year_str), months.get(month_str, 0)
+        except:
+            return (0, 0)  # Return tuple for proper sorting if parsing fails
+    
+    # Sort dates from newest to oldest
+    dates.sort(key=parse_date, reverse=True)
+    
     glucose_df = df[df['type'] == 'glucose'].copy()
     insulin_df = df[df['type'] == 'insulin'].copy()
     return dates, glucose_df, insulin_df
 
+# Load data
 # Initialize session state if 'df' doesn't exist
 if 'df' not in st.session_state:
     # Sample data
@@ -91,19 +106,19 @@ dates, glucose_df, insulin_df = process_data(st.session_state.df)
 # Colors
 colors = {
     'above': 'rgb(239, 68, 68)',    # Red
-    'below': 'rgb(59, 130, 246)',   # Blue
+    'below': 'rgb(239, 68, 68)',    # Red
     'previous': 'rgb(156, 163, 175)', # Gray
     'reference': 'rgb(16, 185, 129)',  # Green
     'shading': 'rgba(59, 130, 246, 0.1)'  # Light blue
 }
 
-# Create figure
+# Update subplot titles using the dates
 fig = make_subplots(
     rows=2, 
     cols=1,
     subplot_titles=(
-        '<span style="font-family: Cormorant Garamond; font-size: 28px;">90 Minute Glucose Response to 75g Dextrose</span>',
-        '<span style="font-family: Cormorant Garamond; font-size: 28px;">90 Minute Insulin Response to 75g dextrose</span>'
+        f'<span style="font-family: Cormorant Garamond; font-size: 28px;">90 Minute Glucose Response to 75g Dextrose ({dates[0]} vs {dates[1] if len(dates) > 1 else "Reference"})</span>',
+        f'<span style="font-family: Cormorant Garamond; font-size: 28px;">90 Minute Insulin Response to 75g Dextrose ({dates[0]} vs {dates[1] if len(dates) > 1 else "Reference"})</span>'
     ),
     vertical_spacing=0.25
 )
@@ -152,33 +167,65 @@ def add_traces(df, row, measure_type):
         row=row, col=1
     )
     
-    # Add shading
-    if show_shading and len(dates) > 1:
-        previous_values = df[dates[1]].values
+    # Add conditional shading
+    if show_shading:
+        # Get comparison values (either previous test or reference)
+        if len(dates) > 1:
+            compare_values = df[dates[1]].values
+            compare_label = dates[1]
+        else:
+            compare_values = df['reference'].values
+            compare_label = 'reference'
         
-        fig.add_trace(
-            go.Scatter(
-                x=time,
-                y=current_values,
-                mode='lines',
-                line=dict(width=0),
-                showlegend=False
-            ),
-            row=row, col=1
-        )
+        # Create arrays for selective shading
+        x_shade = []
+        y1_shade = []
+        y2_shade = []
         
-        fig.add_trace(
-            go.Scatter(
-                x=time,
-                y=previous_values,
-                fill='tonexty',
-                mode='lines',
-                line=dict(width=0),
-                fillcolor=colors['shading'],
-                showlegend=False
-            ),
-            row=row, col=1
-        )
+        for i in range(len(time)-1):
+            # Add points for current segment
+            if current_values[i] > compare_values[i] or current_values[i+1] > compare_values[i+1]:
+                if i == 0 or len(x_shade) == 0:  # Start new section
+                    x_shade.extend([time[i]])
+                    y1_shade.extend([compare_values[i]])
+                    y2_shade.extend([current_values[i]])
+                
+                x_shade.extend([time[i+1]])
+                y1_shade.extend([compare_values[i+1]])
+                y2_shade.extend([current_values[i+1]])
+            else:
+                if len(x_shade) > 0:  # End current section with None to break fill
+                    x_shade.extend([None])
+                    y1_shade.extend([None])
+                    y2_shade.extend([None])
+        
+        if len(x_shade) > 0:
+            # Add lower bound trace
+            fig.add_trace(
+                go.Scatter(
+                    x=x_shade,
+                    y=y1_shade,
+                    mode='lines',
+                    line=dict(width=0),
+                    showlegend=False
+                ),
+                row=row, col=1
+            )
+            
+            # Add upper bound trace with fill
+            fig.add_trace(
+                go.Scatter(
+                    x=x_shade,
+                    y=y2_shade,
+                    fill='tonexty',
+                    mode='lines',
+                    line=dict(width=0),
+                    fillcolor=colors['shading'],
+                    showlegend=False,
+                    name=f'Exceeded {compare_label}'
+                ),
+                row=row, col=1
+            )
     
     # Add previous data
     if len(dates) > 1:
@@ -300,6 +347,7 @@ with st.container():
     else:
         st.info("To enable PNG download, install the kaleido package using: pip install kaleido")
 
+
 # Metrics in containers
 st.markdown('<p class="subtitle">Analysis</p>', unsafe_allow_html=True)
 col1, col2 = st.columns(2)
@@ -341,21 +389,95 @@ with col2:
             f"{delta:.1f} µU/mL vs previous"
         )
 
-# Data editor and download section at the bottom
-st.markdown('<p class="subtitle">Data Editor</p>', unsafe_allow_html=True)
-with st.container():
-    edited_df = st.data_editor(
-        st.session_state.df,
-        num_rows="fixed",
-        hide_index=True,
-        use_container_width=True
-    )
+# Replace the existing Data Editor section with this enhanced version
 
-    # Download button for edited data
-    csv = edited_df.to_csv(index=False)
-    st.download_button(
-        label="Download CSV",
-        data=csv,
-        file_name="edited_glucose_insulin_data.csv",
-        mime="text/csv"
-    )
+st.markdown('<p class="subtitle">Data Management</p>', unsafe_allow_html=True)
+
+# Add tabs for different data management operations
+data_tab, column_tab = st.tabs(["Row Operations", "Column Management"])
+
+with data_tab:
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        # Enhanced data editor with row operations
+        edited_df = st.data_editor(
+            st.session_state.df,
+            num_rows="dynamic",  # Allow adding/removing rows
+            hide_index=True,
+            use_container_width=True
+        )
+    
+    with col2:
+        st.markdown("#### Add New Test Date")
+        # Add new date column
+        new_month = st.selectbox("Month", 
+            ["Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+             "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"])
+        new_year = st.number_input("Year", min_value=2020, max_value=2030, value=2025)
+        new_date = f"{new_month} {new_year}"
+        
+        if st.button("Add New Date Column"):
+            if new_date not in edited_df.columns:
+                # Add new column with default values
+                glucose_default = edited_df[edited_df['type'] == 'glucose']['reference'].values
+                insulin_default = edited_df[edited_df['type'] == 'insulin']['reference'].values
+                defaults = pd.concat([pd.Series(glucose_default), pd.Series(insulin_default)])
+                edited_df[new_date] = defaults
+                st.session_state.df = edited_df
+                st.success(f"Added new date column: {new_date}")
+                st.rerun()
+            else:
+                st.error("This date column already exists!")
+
+with column_tab:
+    st.markdown("#### Manage Test Dates")
+    
+    # Get date columns (excluding special columns)
+    date_columns = [col for col in edited_df.columns 
+                   if col not in ['time', 'type', 'reference']]
+    
+    if date_columns:
+        col_to_remove = st.selectbox("Select date to remove", date_columns)
+        if st.button("Remove Selected Date"):
+            edited_df = edited_df.drop(columns=[col_to_remove])
+            st.session_state.df = edited_df
+            st.success(f"Removed date column: {col_to_remove}")
+            st.rerun()
+    else:
+        st.warning("No date columns to remove.")
+
+# Validation and save changes
+if st.button("Save Changes"):
+    # Validate the data
+    valid = True
+    error_msg = []
+    
+    # Check for numeric values in date columns
+    for col in [c for c in edited_df.columns if c not in ['time', 'type']]:
+        if col != 'reference':
+            try:
+                pd.to_numeric(edited_df[col], errors='raise')
+            except ValueError:
+                valid = False
+                error_msg.append(f"Non-numeric values found in column {col}")
+    
+    # Check for correct types
+    if not all(t in ['glucose', 'insulin'] for t in edited_df['type']):
+        valid = False
+        error_msg.append("Invalid types found. Only 'glucose' and 'insulin' are allowed.")
+    
+    if valid:
+        st.session_state.df = edited_df
+        st.success("Changes saved successfully!")
+    else:
+        st.error("Validation failed:\n" + "\n".join(error_msg))
+
+# Download button for edited data
+csv = edited_df.to_csv(index=False)
+st.download_button(
+    label="Download Updated CSV",
+    data=csv,
+    file_name="edited_glucose_insulin_data.csv",
+    mime="text/csv"
+)
