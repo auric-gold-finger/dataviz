@@ -117,8 +117,8 @@ fig = make_subplots(
     rows=2, 
     cols=1,
     subplot_titles=(
-        f'<span style="font-family: Cormorant Garamond; font-size: 28px;">90 Minute Glucose Response to 75g Dextrose ({dates[0]} vs {dates[1] if len(dates) > 1 else "Reference"})</span>',
-        f'<span style="font-family: Cormorant Garamond; font-size: 28px;">90 Minute Insulin Response to 75g Dextrose ({dates[0]} vs {dates[1] if len(dates) > 1 else "Reference"})</span>'
+        f'<span style="font-family: Cormorant Garamond; font-size: 28px;">Glucose Response to 75g Dextrose ({dates[0]} vs {dates[1] if len(dates) > 1 else "Reference"})</span>',
+        f'<span style="font-family: Cormorant Garamond; font-size: 28px;">Insulin Response to 75g Dextrose ({dates[0]} vs {dates[1] if len(dates) > 1 else "Reference"})</span>'
     ),
     vertical_spacing=0.25
 )
@@ -294,7 +294,7 @@ fig.update_xaxes(
     title_font=dict(family="Avenir"), 
     tickfont=dict(family="Avenir"),
     tickmode='array',
-    tickvals=[0, 30, 60, 90]
+    tickvals=[0, 30, 60, 90, 120]
 )
 
 # Calculate y-axis ranges with padding
