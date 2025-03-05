@@ -105,8 +105,8 @@ dates, glucose_df, insulin_df = process_data(st.session_state.df)
 
 # Colors
 colors = {
-    'above': 'rgb(239, 68, 68)',    # Red
-    'below': 'rgb(239, 68, 68)',    # Red
+    'above': 'rgb(0, 149, 255)',    # blue
+    'below': 'rgb(0, 149, 255)',    # blue
     'previous': 'rgb(156, 163, 175)', # Gray
     'reference': 'rgb(16, 185, 129)',  # Green
     'shading': 'rgba(59, 130, 246, 0.1)'  # Light blue
