@@ -272,6 +272,8 @@ fig.update_layout(
     height=1200,  # Increased height
     showlegend=True,
     template='plotly_white',
+    plot_bgcolor='rgba(0,0,0,0)',  # Transparent plot area
+    paper_bgcolor='rgba(0,0,0,0)', 
     title_font=dict(
         family="Cormorant Garamond",
         color="Black"
