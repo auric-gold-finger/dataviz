@@ -115,14 +115,10 @@ colors = {
     'shading': shading_color_rgba  # Use rgba version of picked color
 }
 
-# Update subplot titles using the dates
+# Create the subplot without titles (we'll add them properly later)
 fig = make_subplots(
     rows=2, 
     cols=1,
-    subplot_titles=(
-        f'<span style="font-family: Cormorant Garamond; font-size: 28px;">Glucose Response to 75g Dextrose ({dates[0]} vs {dates[1] if len(dates) > 1 else "Reference"})</span>',
-        f'<span style="font-family: Cormorant Garamond; font-size: 28px;">Insulin Response to 75g Dextrose ({dates[0]} vs {dates[1] if len(dates) > 1 else "Reference"})</span>'
-    ),
     vertical_spacing=0.25
 )
 
@@ -267,16 +263,34 @@ def add_traces(df, row, measure_type):
 add_traces(glucose_df, 1, "Glucose")
 add_traces(insulin_df, 2, "Insulin")
 
+# Add proper subplot titles after figure creation
 fig.update_layout(
     height=1200,  # Increased height
     showlegend=True,
     template='plotly_white',
     plot_bgcolor='rgba(0,0,0,0)',  # Transparent plot area
-    paper_bgcolor='rgba(0,0,0,0)', 
-    title_font=dict(
-        family="Cormorant Garamond",
-        color="Black"
-    ),
+    paper_bgcolor='rgba(0,0,0,0)',
+    # Add proper titles for each subplot
+    annotations=[
+        dict(
+            text=f'Glucose Response to 75g Dextrose ({dates[0]} vs {dates[1] if len(dates) > 1 else "Reference"})',
+            font=dict(family="Cormorant Garamond", size=28, color="Black"),
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=1.0,
+            showarrow=False
+        ),
+        dict(
+            text=f'Insulin Response to 75g Dextrose ({dates[0]} vs {dates[1] if len(dates) > 1 else "Reference"})',
+            font=dict(family="Cormorant Garamond", size=28, color="Black"),
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.45,
+            showarrow=False
+        )
+    ],
     legend=dict(
         yanchor="top",
         y=1.1,
