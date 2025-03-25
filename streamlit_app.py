@@ -158,36 +158,63 @@ def add_traces(df, row, measure_type):
     
     # Add shading between current line and reference where current > reference
     if show_shading:
-        # Create arrays for selective shading
-        x_shade = []
-        y1_shade = []  # Reference line values
-        y2_shade = []  # Current values
+        # For proper shading, we need to create fill areas only where current is above reference
+        # We'll create a combined array with None values separating segments
+        x_combined = []
+        y_current = []
+        y_reference = []
         
-        for i in range(len(time)-1):
-            # Check if current value is above reference for this segment
-            if current_values[i] > reference_values[i] or current_values[i+1] > reference_values[i+1]:
-                # If starting a new section or this is the first point
-                if len(x_shade) == 0 or x_shade[-1] is None:
-                    x_shade.append(time[i])
-                    y1_shade.append(reference_values[i])
-                    y2_shade.append(current_values[i])
+        for i in range(len(time)):
+            if current_values[i] > reference_values[i]:
+                # This point is above reference, include it
+                x_combined.append(time[i])
+                y_current.append(current_values[i])
+                y_reference.append(reference_values[i])
                 
-                x_shade.append(time[i+1])
-                y1_shade.append(reference_values[i+1])
-                y2_shade.append(current_values[i+1])
+                # If this is the last point or the next point is below reference,
+                # we need to close the segment with None values
+                if i == len(time) - 1 or current_values[i+1] <= reference_values[i+1]:
+                    x_combined.append(None)
+                    y_current.append(None)
+                    y_reference.append(None)
             else:
-                # If we have points and need to break the fill
-                if len(x_shade) > 0 and x_shade[-1] is not None:
-                    x_shade.append(None)
-                    y1_shade.append(None)
-                    y2_shade.append(None)
+                # If previous point was above reference, start a new segment
+                if i > 0 and current_values[i-1] > reference_values[i-1]:
+                    # We just crossed below, add the crossing point for a clean fill
+                    # Find where the lines cross between this point and previous point
+                    if current_values[i] != current_values[i-1]:  # Avoid division by zero
+                        # Parametric value where lines cross
+                        t = (reference_values[i-1] - current_values[i-1]) / (current_values[i] - current_values[i-1] - (reference_values[i] - reference_values[i-1]))
+                        if 0 <= t <= 1:  # Valid crossing point
+                            cross_x = time[i-1] + t * (time[i] - time[i-1])
+                            cross_y = reference_values[i-1] + t * (reference_values[i] - reference_values[i-1])
+                            x_combined.append(cross_x)
+                            y_current.append(cross_y)
+                            y_reference.append(cross_y)
+                            x_combined.append(None)
+                            y_current.append(None)
+                            y_reference.append(None)
+                
+                # If the next point will be above reference, start including points now
+                if i < len(time) - 1 and current_values[i+1] > reference_values[i+1]:
+                    # We're about to cross above, add the crossing point for a clean fill
+                    if current_values[i+1] != current_values[i]:  # Avoid division by zero
+                        # Parametric value where lines cross
+                        t = (reference_values[i] - current_values[i]) / (current_values[i+1] - current_values[i] - (reference_values[i+1] - reference_values[i]))
+                        if 0 <= t <= 1:  # Valid crossing point
+                            cross_x = time[i] + t * (time[i+1] - time[i])
+                            cross_y = reference_values[i] + t * (reference_values[i+1] - reference_values[i])
+                            x_combined.append(cross_x)
+                            y_current.append(cross_y)
+                            y_reference.append(cross_y)
         
-        if len(x_shade) > 0:
+        # Only add shading if we have points to shade
+        if len(x_combined) > 0:
             # Add reference line as lower bound
             fig.add_trace(
                 go.Scatter(
-                    x=x_shade,
-                    y=y1_shade,
+                    x=x_combined,
+                    y=y_reference,
                     mode='lines',
                     line=dict(width=0),
                     showlegend=False,
@@ -199,8 +226,8 @@ def add_traces(df, row, measure_type):
             # Add current line as upper bound with fill
             fig.add_trace(
                 go.Scatter(
-                    x=x_shade,
-                    y=y2_shade,
+                    x=x_combined,
+                    y=y_current,
                     fill='tonexty',
                     mode='lines',
                     line=dict(width=0),
@@ -263,14 +290,14 @@ def add_traces(df, row, measure_type):
 add_traces(glucose_df, 1, "Glucose")
 add_traces(insulin_df, 2, "Insulin")
 
-# Add proper subplot titles after figure creation
+    # Add proper subplot titles after figure creation
 fig.update_layout(
     height=1200,  # Increased height
     showlegend=True,
     template='plotly_white',
     plot_bgcolor='rgba(0,0,0,0)',  # Transparent plot area
     paper_bgcolor='rgba(0,0,0,0)',
-    # Add proper titles for each subplot
+    # Add proper titles for each subplot with adjusted positions
     annotations=[
         dict(
             text=f'Glucose Response to 75g Dextrose ({dates[0]} vs {dates[1] if len(dates) > 1 else "Reference"})',
@@ -278,7 +305,7 @@ fig.update_layout(
             xref="paper",
             yref="paper",
             x=0.5,
-            y=1.0,
+            y=1.12,  # Moved up more to increase space below title
             showarrow=False
         ),
         dict(
@@ -287,20 +314,20 @@ fig.update_layout(
             xref="paper",
             yref="paper",
             x=0.5,
-            y=0.45,
+            y=0.48,  # Moved up to avoid overlap
             showarrow=False
         )
     ],
     legend=dict(
         yanchor="top",
-        y=1.1,
+        y=1.15,  # Moved lower from the top to create more space
         xanchor="center",
         x=0.5,
         font=dict(family="Avenir"),
         orientation="h"
     ),
     font=dict(family="Avenir"),
-    margin=dict(t=150, r=50, b=50, l=50)
+    margin=dict(t=200, r=50, b=50, l=50)  # Further increased top margin
 )
 
 # Update axes
