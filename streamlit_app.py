@@ -6,13 +6,6 @@ import pandas as pd
 import numpy as np
 import io
 
-# At the top of the file, add these imports
-import streamlit as st
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import pandas as pd
-import io
-
 # Add a try-except block for kaleido
 try:
     import kaleido
@@ -53,11 +46,22 @@ with st.sidebar:
     # Move file uploader to sidebar
     uploaded_file = st.file_uploader("Upload your CSV data", type=['csv'])
     
+    # Add color control expander
+    with st.expander("Line & Marker Colors", expanded=False):
+        current_line_color = st.color_picker("Current Data Color", value="#0095FF")
+        previous_line_color = st.color_picker("Previous Data Color", value="#9CA3AF")
+        reference_line_color = st.color_picker("Reference Line Color", value="#10B981")
+        shading_color = st.color_picker("Shading Color", value="#3B82F6")
+        # Convert hex colors to rgba for shading with transparency
+        r, g, b = int(shading_color[1:3], 16), int(shading_color[3:5], 16), int(shading_color[5:7], 16)
+        shading_color_rgba = f"rgba({r}, {g}, {b}, 0.1)"
+    
     show_reference = st.checkbox("Show Reference Lines", value=True)
     show_markers = st.checkbox("Show Data Points", value=True)
     show_shading = st.checkbox("Show Area Shading", value=True)
     marker_size = st.slider("Marker Size", 5, 15, 8)
     line_width = st.slider("Line Width", 1, 5, 2)
+    annotation_size = st.slider("Annotation Text Size", 8, 20, 14)
 
 def process_data(df):
     # Get all column names except time, type, and reference
@@ -105,11 +109,10 @@ dates, glucose_df, insulin_df = process_data(st.session_state.df)
 
 # Colors
 colors = {
-    'above': 'rgb(0, 149, 255)',    # blue
-    'below': 'rgb(0, 149, 255)',    # blue
-    'previous': 'rgb(156, 163, 175)', # Gray
-    'reference': 'rgb(16, 185, 129)',  # Green
-    'shading': 'rgba(59, 130, 246, 0.1)'  # Light blue
+    'current': current_line_color,  # Use color from picker
+    'previous': previous_line_color,  # Use color from picker
+    'reference': reference_line_color,  # Use color from picker
+    'shading': shading_color_rgba  # Use rgba version of picked color
 }
 
 # Update subplot titles using the dates
@@ -123,43 +126,33 @@ fig = make_subplots(
     vertical_spacing=0.25
 )
 
-def create_segment_colors(values, reference_values):
-    """Create color array for line segments based on comparison with reference"""
-    colors_list = []
-    for i in range(len(values)-1):
-        # If either point in the segment is above reference, color it red
-        if values[i] > reference_values[i] or values[i+1] > reference_values[i+1]:
-            colors_list.append(colors['above'])
-        else:
-            colors_list.append(colors['below'])
-    return colors_list
-
 def add_traces(df, row, measure_type):
     time = df['time'].values
     current_date = dates[0]
     mode = 'lines+markers+text' if show_markers else 'lines+text'
     
-    # Get reference values for coloring
+    # Get reference values
     reference_values = df['reference'].values
     current_values = df[current_date].values
     
-    # Create segment colors
-    segment_colors = create_segment_colors(current_values, reference_values)
-    
-    # Add current data with segments
+    # Add current data
     fig.add_trace(
         go.Scatter(
             x=time,
             y=current_values,
             mode=mode,
-            line=dict(color=colors['above'], width=line_width),
+            line=dict(color=colors['current'], width=line_width),
             marker=dict(
                 size=marker_size,
-                color=[colors['above'] if v > r else colors['below'] 
-                      for v, r in zip(current_values, reference_values)]
+                color=colors['current']
             ),
             text=current_values.round(1),
             textposition='top center',
+            textfont=dict(
+                family="Avenir",
+                size=annotation_size,
+                color="black"
+            ),
             name=f"{current_date}",
             showlegend=(row == 1),  # Only show in legend for first plot
             legendgroup=current_date
@@ -167,52 +160,47 @@ def add_traces(df, row, measure_type):
         row=row, col=1
     )
     
-    # Add conditional shading
+    # Add shading between current line and reference where current > reference
     if show_shading:
-        # Get comparison values (either previous test or reference)
-        if len(dates) > 1:
-            compare_values = df[dates[1]].values
-            compare_label = dates[1]
-        else:
-            compare_values = df['reference'].values
-            compare_label = 'reference'
-        
         # Create arrays for selective shading
         x_shade = []
-        y1_shade = []
-        y2_shade = []
+        y1_shade = []  # Reference line values
+        y2_shade = []  # Current values
         
         for i in range(len(time)-1):
-            # Add points for current segment
-            if current_values[i] > compare_values[i] or current_values[i+1] > compare_values[i+1]:
-                if i == 0 or len(x_shade) == 0:  # Start new section
-                    x_shade.extend([time[i]])
-                    y1_shade.extend([compare_values[i]])
-                    y2_shade.extend([current_values[i]])
+            # Check if current value is above reference for this segment
+            if current_values[i] > reference_values[i] or current_values[i+1] > reference_values[i+1]:
+                # If starting a new section or this is the first point
+                if len(x_shade) == 0 or x_shade[-1] is None:
+                    x_shade.append(time[i])
+                    y1_shade.append(reference_values[i])
+                    y2_shade.append(current_values[i])
                 
-                x_shade.extend([time[i+1]])
-                y1_shade.extend([compare_values[i+1]])
-                y2_shade.extend([current_values[i+1]])
+                x_shade.append(time[i+1])
+                y1_shade.append(reference_values[i+1])
+                y2_shade.append(current_values[i+1])
             else:
-                if len(x_shade) > 0:  # End current section with None to break fill
-                    x_shade.extend([None])
-                    y1_shade.extend([None])
-                    y2_shade.extend([None])
+                # If we have points and need to break the fill
+                if len(x_shade) > 0 and x_shade[-1] is not None:
+                    x_shade.append(None)
+                    y1_shade.append(None)
+                    y2_shade.append(None)
         
         if len(x_shade) > 0:
-            # Add lower bound trace
+            # Add reference line as lower bound
             fig.add_trace(
                 go.Scatter(
                     x=x_shade,
                     y=y1_shade,
                     mode='lines',
                     line=dict(width=0),
-                    showlegend=False
+                    showlegend=False,
+                    hoverinfo='skip'
                 ),
                 row=row, col=1
             )
             
-            # Add upper bound trace with fill
+            # Add current line as upper bound with fill
             fig.add_trace(
                 go.Scatter(
                     x=x_shade,
@@ -222,7 +210,8 @@ def add_traces(df, row, measure_type):
                     line=dict(width=0),
                     fillcolor=colors['shading'],
                     showlegend=False,
-                    name=f'Exceeded {compare_label}'
+                    name='Above Reference',
+                    hoverinfo='skip'
                 ),
                 row=row, col=1
             )
@@ -237,9 +226,14 @@ def add_traces(df, row, measure_type):
                     name=f"{prev_date}",
                     mode=mode,
                     line=dict(color=colors['previous'], width=line_width),
-                    marker=dict(size=marker_size),
+                    marker=dict(size=marker_size, color=colors['previous']),
                     text=df[prev_date].values.round(1),
                     textposition='top center',
+                    textfont=dict(
+                        family="Avenir",
+                        size=annotation_size,
+                        color="black"
+                    ),
                     showlegend=(row == 1),  # Only show in legend for first plot
                     legendgroup=prev_date
                 ),
@@ -255,9 +249,14 @@ def add_traces(df, row, measure_type):
                 name="Reference",
                 mode=mode,
                 line=dict(color=colors['reference'], width=line_width, dash='dash'),
-                marker=dict(size=marker_size),
+                marker=dict(size=marker_size, color=colors['reference']),
                 text=df['reference'].values.round(1),
                 textposition='top center',
+                textfont=dict(
+                    family="Avenir",
+                    size=annotation_size,
+                    color="black"
+                ),
                 showlegend=(row == 1),  # Only show reference in legend once
                 legendgroup='reference'
             ),
