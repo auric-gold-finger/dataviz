@@ -122,70 +122,129 @@ def calculate_auc(time_points, values):
         auc += dt * avg_height
     return auc
 
-def interpret_glucose_response(glucose_values, time_points):
-    """Provide clinical interpretation of glucose response"""
-    baseline = glucose_values[0]
-    peak = max(glucose_values)
-    peak_time = time_points[np.argmax(glucose_values)]
-    final = glucose_values[-1]
-    
-    interpretations = []
-    
-    # Baseline interpretation
-    if baseline < 70:
-        interpretations.append("⚠️ Low baseline glucose - possible hypoglycemia")
-    elif baseline > 100:
-        interpretations.append("⚠️ Elevated baseline glucose - possible impaired fasting glucose")
-    else:
-        interpretations.append("✅ Normal baseline glucose")
-    
-    # Peak response
-    if peak > 200:
-        interpretations.append("⚠️ High peak glucose response - possible glucose intolerance")
-    elif peak > 140:
-        interpretations.append("⚡ Moderate peak glucose response")
-    else:
-        interpretations.append("✅ Normal peak glucose response")
-    
-    # Recovery
-    if final > baseline + 20:
-        interpretations.append("⚠️ Glucose not returning to baseline - possible delayed clearance")
-    else:
-        interpretations.append("✅ Good glucose recovery")
-    
-    return interpretations
+def calculate_matsuda_index(glucose_values, insulin_values, time_points):
+    """
+    Calculate Matsuda Index (ISI) for insulin sensitivity
+    Formula: 10000 / sqrt((FPG × FPI) × (mean glucose × mean insulin))
+    Where FPG = fasting plasma glucose, FPI = fasting plasma insulin
+    """
+    try:
+        # Fasting values (baseline)
+        fpg = glucose_values[0]  # mg/dL
+        fpi = insulin_values[0]  # µU/mL
+        
+        # Mean glucose and insulin during OGTT (excluding fasting)
+        mean_glucose = np.mean(glucose_values[1:]) if len(glucose_values) > 1 else glucose_values[0]
+        mean_insulin = np.mean(insulin_values[1:]) if len(insulin_values) > 1 else insulin_values[0]
+        
+        # Matsuda index calculation
+        matsuda = 10000 / np.sqrt((fpg * fpi) * (mean_glucose * mean_insulin))
+        return matsuda
+    except:
+        return None
 
-def interpret_insulin_response(insulin_values, time_points):
-    """Provide clinical interpretation of insulin response"""
-    baseline = insulin_values[0]
-    peak = max(insulin_values)
-    peak_time = time_points[np.argmax(insulin_values)]
+def calculate_homa_ir(glucose_fasting, insulin_fasting):
+    """
+    Calculate HOMA-IR (Homeostatic Model Assessment of Insulin Resistance)
+    Formula: (Fasting Glucose × Fasting Insulin) / 405
+    """
+    try:
+        return (glucose_fasting * insulin_fasting) / 405
+    except:
+        return None
+
+def calculate_glucose_insulin_ratio(glucose_values, insulin_values):
+    """
+    Calculate glucose/insulin ratios at different time points
+    Lower ratios may indicate insulin resistance
+    """
+    try:
+        ratios = []
+        for g, i in zip(glucose_values, insulin_values):
+            if i > 0:  # Avoid division by zero
+                ratios.append(g / i)
+            else:
+                ratios.append(float('inf'))
+        return ratios
+    except:
+        return None
+
+def get_dynamic_interpretation(glucose_values, insulin_values, time_points):
+    """
+    Provide dynamic interpretation based on calculated indices
+    """
+    interpretations = {
+        'glucose': [],
+        'insulin': [],
+        'metabolic': []
+    }
     
-    interpretations = []
+    # Calculate metabolic indices
+    matsuda = calculate_matsuda_index(glucose_values, insulin_values, time_points)
+    homa_ir = calculate_homa_ir(glucose_values[0], insulin_values[0])
+    gi_ratios = calculate_glucose_insulin_ratio(glucose_values, insulin_values)
     
-    # Baseline interpretation
-    if baseline > 15:
-        interpretations.append("⚠️ Elevated baseline insulin - possible insulin resistance")
+    # Glucose interpretations
+    baseline_glucose = glucose_values[0]
+    peak_glucose = max(glucose_values)
+    glucose_2h = glucose_values[-1] if len(glucose_values) >= 4 else None
+    
+    if baseline_glucose < 70:
+        interpretations['glucose'].append("⚠️ Hypoglycemia risk - fasting glucose too low")
+    elif baseline_glucose > 126:
+        interpretations['glucose'].append("🔴 Diabetic range - fasting glucose ≥126 mg/dL")
+    elif baseline_glucose > 100:
+        interpretations['glucose'].append("🟡 Impaired fasting glucose (100-125 mg/dL)")
     else:
-        interpretations.append("✅ Normal baseline insulin")
+        interpretations['glucose'].append("✅ Normal fasting glucose (<100 mg/dL)")
     
-    # Peak response
-    if peak > 100:
-        interpretations.append("⚠️ High peak insulin response - possible insulin resistance")
-    elif peak < 30:
-        interpretations.append("⚠️ Low peak insulin response - possible impaired insulin secretion")
+    if glucose_2h is not None:
+        if glucose_2h >= 200:
+            interpretations['glucose'].append("🔴 Diabetic range - 2h glucose ≥200 mg/dL")
+        elif glucose_2h >= 140:
+            interpretations['glucose'].append("🟡 Impaired glucose tolerance (140-199 mg/dL)")
+        else:
+            interpretations['glucose'].append("✅ Normal glucose tolerance (<140 mg/dL)")
+    
+    # Insulin interpretations
+    baseline_insulin = insulin_values[0]
+    peak_insulin = max(insulin_values)
+    
+    if baseline_insulin > 25:
+        interpretations['insulin'].append("⚠️ Elevated fasting insulin - possible insulin resistance")
+    elif baseline_insulin < 2:
+        interpretations['insulin'].append("⚠️ Low fasting insulin - possible β-cell dysfunction")
     else:
-        interpretations.append("✅ Normal peak insulin response")
+        interpretations['insulin'].append("✅ Normal fasting insulin (2-25 µU/mL)")
     
-    # Response timing
-    if peak_time <= 30:
-        interpretations.append("⚡ Early peak insulin response")
-    elif peak_time >= 90:
-        interpretations.append("⚠️ Delayed peak insulin response")
-    else:
-        interpretations.append("✅ Normal timing of peak insulin response")
+    if peak_insulin > 150:
+        interpretations['insulin'].append("⚠️ Excessive insulin response - insulin resistance likely")
+    elif peak_insulin < 30:
+        interpretations['insulin'].append("⚠️ Blunted insulin response - β-cell dysfunction possible")
     
-    return interpretations
+    # Metabolic interpretations based on calculated indices
+    if matsuda is not None:
+        if matsuda < 2.5:
+            interpretations['metabolic'].append(f"🔴 Low insulin sensitivity (Matsuda: {matsuda:.1f}) - insulin resistance")
+        elif matsuda < 5.0:
+            interpretations['metabolic'].append(f"🟡 Reduced insulin sensitivity (Matsuda: {matsuda:.1f})")
+        else:
+            interpretations['metabolic'].append(f"✅ Good insulin sensitivity (Matsuda: {matsuda:.1f})")
+    
+    if homa_ir is not None:
+        if homa_ir > 2.5:
+            interpretations['metabolic'].append(f"⚠️ Insulin resistance (HOMA-IR: {homa_ir:.1f})")
+        else:
+            interpretations['metabolic'].append(f"✅ Normal insulin sensitivity (HOMA-IR: {homa_ir:.1f})")
+    
+    if gi_ratios:
+        fasting_ratio = gi_ratios[0]
+        if fasting_ratio < 6:
+            interpretations['metabolic'].append(f"⚠️ Low G/I ratio ({fasting_ratio:.1f}) suggests insulin resistance")
+        else:
+            interpretations['metabolic'].append(f"✅ Normal G/I ratio ({fasting_ratio:.1f})")
+    
+    return interpretations, {'matsuda': matsuda, 'homa_ir': homa_ir, 'gi_ratios': gi_ratios}
 
 # Load data
 if 'df' not in st.session_state:
@@ -258,35 +317,44 @@ def add_traces(df, row, measure_type):
     
     # Add shading between current line and reference where current > reference
     if show_shading:
-        # Simple approach: create two complete traces and use fill='tonexty'
-        # This avoids complex intersection calculations
+        # Create segments only where current > reference
+        x_fill = []
+        y_fill_upper = []
+        y_fill_lower = []
         
-        # Create arrays where values below reference are set to reference value
-        y_lower = reference_values.copy()  # This will be the lower bound
-        y_upper = np.maximum(current_values, reference_values)  # Upper bound (current or reference, whichever is higher)
+        for i in range(len(time)):
+            if current_values[i] > reference_values[i]:
+                x_fill.append(time[i])
+                y_fill_upper.append(current_values[i])
+                y_fill_lower.append(reference_values[i])
+            else:
+                # Add None to break the fill when current <= reference
+                if len(x_fill) > 0 and x_fill[-1] is not None:
+                    x_fill.extend([None, None])
+                    y_fill_upper.extend([None, None])
+                    y_fill_lower.extend([None, None])
         
-        # Only show shading where current > reference
-        shading_mask = current_values > reference_values
-        
-        if np.any(shading_mask):
-            # Create the shading traces
+        # Only add shading if we have points where current > reference
+        if len([x for x in x_fill if x is not None]) > 0:
+            # Add lower boundary (reference line)
             fig.add_trace(
                 go.Scatter(
-                    x=time,
-                    y=y_lower,
+                    x=x_fill,
+                    y=y_fill_lower,
                     mode='lines',
                     line=dict(width=0),
                     showlegend=False,
                     hoverinfo='skip',
-                    name='reference_bound'
+                    name='fill_lower'
                 ),
                 row=row, col=1
             )
             
+            # Add upper boundary (current line) with fill
             fig.add_trace(
                 go.Scatter(
-                    x=time,
-                    y=y_upper,
+                    x=x_fill,
+                    y=y_fill_upper,
                     fill='tonexty',
                     mode='lines',
                     line=dict(width=0),
@@ -474,8 +542,13 @@ current_insulin = insulin_df[current_date].values
 glucose_auc = calculate_auc(time_points, current_glucose)
 insulin_auc = calculate_auc(time_points, current_insulin)
 
+# Calculate metabolic indices
+matsuda_index = calculate_matsuda_index(current_glucose, current_insulin, time_points)
+homa_ir = calculate_homa_ir(current_glucose[0], current_insulin[0])
+gi_ratios = calculate_glucose_insulin_ratio(current_glucose, current_insulin)
+
 # Metrics in enhanced containers
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4, col5 = st.columns(5)
 
 with col1:
     st.markdown('<div class="metric-card">', unsafe_allow_html=True)
@@ -515,44 +588,106 @@ with col2:
 
 with col3:
     st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-    st.metric(
-        "Glucose AUC",
-        f"{glucose_auc:.0f} mg·min/dL",
-        help="Area under the glucose curve"
-    )
+    if matsuda_index is not None:
+        # Color coding based on Matsuda index
+        if matsuda_index < 2.5:
+            color = "🔴"
+        elif matsuda_index < 5.0:
+            color = "🟡"
+        else:
+            color = "✅"
+        st.metric(
+            f"{color} Matsuda Index",
+            f"{matsuda_index:.1f}",
+            help="Insulin sensitivity index (>5.0 = good, 2.5-5.0 = reduced, <2.5 = low)"
+        )
+    else:
+        st.metric("Matsuda Index", "N/A")
     st.markdown('</div>', unsafe_allow_html=True)
 
 with col4:
     st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-    st.metric(
-        "Insulin AUC",
-        f"{insulin_auc:.0f} µU·min/mL",
-        help="Area under the insulin curve"
-    )
+    if homa_ir is not None:
+        color = "⚠️" if homa_ir > 2.5 else "✅"
+        st.metric(
+            f"{color} HOMA-IR",
+            f"{homa_ir:.1f}",
+            help="Insulin resistance index (<2.5 = normal, >2.5 = insulin resistance)"
+        )
+    else:
+        st.metric("HOMA-IR", "N/A")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with col5:
+    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+    if gi_ratios and len(gi_ratios) > 0:
+        fasting_gi_ratio = gi_ratios[0]
+        color = "⚠️" if fasting_gi_ratio < 6 else "✅"
+        st.metric(
+            f"{color} G/I Ratio",
+            f"{fasting_gi_ratio:.1f}",
+            help="Glucose/Insulin ratio (>6 = normal, <6 = possible insulin resistance)"
+        )
+    else:
+        st.metric("G/I Ratio", "N/A")
     st.markdown('</div>', unsafe_allow_html=True)
 
 # Clinical Interpretation Section
 if show_interpretation:
-    st.markdown("### Clinical Interpretation")
+    st.markdown("### Dynamic Clinical Interpretation")
     
-    glucose_interpretations = interpret_glucose_response(current_glucose, time_points)
-    insulin_interpretations = interpret_insulin_response(current_insulin, time_points)
+    # Get dynamic interpretations
+    interpretations, indices = get_dynamic_interpretation(current_glucose, current_insulin, time_points)
     
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         st.markdown('<div class="interpretation">', unsafe_allow_html=True)
         st.markdown("**Glucose Response:**")
-        for interpretation in glucose_interpretations:
+        for interpretation in interpretations['glucose']:
             st.markdown(f"• {interpretation}")
         st.markdown('</div>', unsafe_allow_html=True)
     
     with col2:
         st.markdown('<div class="interpretation">', unsafe_allow_html=True)
         st.markdown("**Insulin Response:**")
-        for interpretation in insulin_interpretations:
+        for interpretation in interpretations['insulin']:
             st.markdown(f"• {interpretation}")
         st.markdown('</div>', unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown('<div class="interpretation">', unsafe_allow_html=True)
+        st.markdown("**Metabolic Health:**")
+        for interpretation in interpretations['metabolic']:
+            st.markdown(f"• {interpretation}")
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Additional metabolic insights
+    if indices['gi_ratios']:
+        st.markdown("#### Glucose/Insulin Ratio Timeline")
+        ratio_fig = go.Figure()
+        ratio_fig.add_trace(
+            go.Scatter(
+                x=time_points,
+                y=indices['gi_ratios'],
+                mode='lines+markers',
+                name='G/I Ratio',
+                line=dict(color='purple', width=3),
+                marker=dict(size=8)
+            )
+        )
+        # Add reference line at 6 (threshold for insulin resistance)
+        ratio_fig.add_hline(y=6, line_dash="dash", line_color="red", 
+                          annotation_text="Insulin Resistance Threshold")
+        
+        ratio_fig.update_layout(
+            title="Glucose/Insulin Ratio Over Time",
+            xaxis_title="Time (minutes)",
+            yaxis_title="Glucose/Insulin Ratio",
+            template='plotly_white',
+            height=300
+        )
+        st.plotly_chart(ratio_fig, use_container_width=True)
 
 # Enhanced Data Management
 st.markdown('<p class="subtitle">Data Management</p>', unsafe_allow_html=True)
