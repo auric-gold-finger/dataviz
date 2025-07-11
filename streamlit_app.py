@@ -302,7 +302,7 @@ fig.update_layout(
             xref="paper",
             yref="paper",
             x=0.5,
-            y=1.09,  # Moved down a bit
+            y=1.12,  # Moved up more to increase space below title
             showarrow=False
         ),
         dict(
@@ -317,7 +317,7 @@ fig.update_layout(
     ],
     legend=dict(
         yanchor="top",
-        y=1.18,  # Moved higher up
+        y=1.15,  # Moved lower from the top to create more space
         xanchor="center",
         x=0.5,
         font=dict(family="Avenir"),
