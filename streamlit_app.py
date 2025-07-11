@@ -258,61 +258,35 @@ def add_traces(df, row, measure_type):
     
     # Add shading between current line and reference where current > reference
     if show_shading:
-        x_combined = []
-        y_current = []
-        y_reference = []
+        # Simple approach: create two complete traces and use fill='tonexty'
+        # This avoids complex intersection calculations
         
-        for i in range(len(time)):
-            if current_values[i] > reference_values[i]:
-                x_combined.append(time[i])
-                y_current.append(current_values[i])
-                y_reference.append(reference_values[i])
-                
-                if i == len(time) - 1 or current_values[i+1] <= reference_values[i+1]:
-                    x_combined.append(None)
-                    y_current.append(None)
-                    y_reference.append(None)
-            else:
-                if i > 0 and current_values[i-1] > reference_values[i-1]:
-                    if current_values[i] != current_values[i-1]:
-                        t = (reference_values[i-1] - current_values[i-1]) / (current_values[i] - current_values[i-1] - (reference_values[i] - reference_values[i-1]))
-                        if 0 <= t <= 1:
-                            cross_x = time[i-1] + t * (time[i] - time[i-1])
-                            cross_y = reference_values[i-1] + t * (reference_values[i] - reference_values[i-1])
-                            x_combined.append(cross_x)
-                            y_current.append(cross_y)
-                            y_reference.append(cross_y)
-                            x_combined.append(None)
-                            y_current.append(None)
-                            y_reference.append(None)
-                
-                if i < len(time) - 1 and current_values[i+1] > reference_values[i+1]:
-                    if current_values[i+1] != current_values[i]:
-                        t = (reference_values[i] - current_values[i]) / (current_values[i+1] - current_values[i] - (reference_values[i+1] - reference_values[i]))
-                        if 0 <= t <= 1:
-                            cross_x = time[i] + t * (time[i+1] - time[i])
-                            cross_y = reference_values[i] + t * (reference_values[i+1] - reference_values[i])
-                            x_combined.append(cross_x)
-                            y_current.append(cross_y)
-                            y_reference.append(cross_y)
+        # Create arrays where values below reference are set to reference value
+        y_lower = reference_values.copy()  # This will be the lower bound
+        y_upper = np.maximum(current_values, reference_values)  # Upper bound (current or reference, whichever is higher)
         
-        if len(x_combined) > 0:
+        # Only show shading where current > reference
+        shading_mask = current_values > reference_values
+        
+        if np.any(shading_mask):
+            # Create the shading traces
             fig.add_trace(
                 go.Scatter(
-                    x=x_combined,
-                    y=y_reference,
+                    x=time,
+                    y=y_lower,
                     mode='lines',
                     line=dict(width=0),
                     showlegend=False,
-                    hoverinfo='skip'
+                    hoverinfo='skip',
+                    name='reference_bound'
                 ),
                 row=row, col=1
             )
             
             fig.add_trace(
                 go.Scatter(
-                    x=x_combined,
-                    y=y_current,
+                    x=time,
+                    y=y_upper,
                     fill='tonexty',
                     mode='lines',
                     line=dict(width=0),
