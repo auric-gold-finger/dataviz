@@ -583,7 +583,7 @@ if show_interpretation:
 # Enhanced Data Management
 st.markdown('<p class="subtitle">Data Management</p>', unsafe_allow_html=True)
 
-data_tab, column_tab, template_tab = st.tabs(["Row Operations", "Column Management", "Templates"])
+data_tab, column_tab, template_tab, compare_tab = st.tabs(["Row Operations", "Column Management", "Templates", "Compare Tests"])
 
 with data_tab:
     col1, col2 = st.columns([2, 1])
@@ -657,6 +657,75 @@ with template_tab:
         st.success(f"Loaded {selected_template} template")
         st.rerun()
 
+with compare_tab:
+    st.markdown("#### Statistical Comparison")
+    
+    if len(dates) >= 2:
+        # Select dates to compare
+        date1 = st.selectbox("First test date", dates, key="date1")
+        date2 = st.selectbox("Second test date", dates, key="date2", index=1 if len(dates) > 1 else 0)
+        
+        if date1 != date2:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**Glucose Comparison**")
+                glucose1 = glucose_df[date1].values
+                glucose2 = glucose_df[date2].values
+                
+                # Calculate differences
+                peak_diff = max(glucose1) - max(glucose2)
+                auc1 = calculate_auc(time_points, glucose1)
+                auc2 = calculate_auc(time_points, glucose2)
+                auc_diff = auc1 - auc2
+                
+                st.metric("Peak Difference", f"{peak_diff:.1f} mg/dL")
+                st.metric("AUC Difference", f"{auc_diff:.0f} mg·min/dL")
+                
+                # Statistical significance (simple t-test approximation)
+                if len(glucose1) > 2:
+                    from scipy.stats import ttest_rel
+                    try:
+                        stat, p_value = ttest_rel(glucose1, glucose2)
+                        significance = "Significant" if p_value < 0.05 else "Not significant"
+                        st.metric("Statistical Test", significance, f"p={p_value:.3f}")
+                    except:
+                        st.info("Install scipy for statistical tests: pip install scipy")
+            
+            with col2:
+                st.markdown("**Insulin Comparison**")
+                insulin1 = insulin_df[date1].values
+                insulin2 = insulin_df[date2].values
+                
+                peak_diff = max(insulin1) - max(insulin2)
+                auc1 = calculate_auc(time_points, insulin1)
+                auc2 = calculate_auc(time_points, insulin2)
+                auc_diff = auc1 - auc2
+                
+                st.metric("Peak Difference", f"{peak_diff:.1f} µU/mL")
+                st.metric("AUC Difference", f"{auc_diff:.0f} µU·min/mL")
+                
+                if len(insulin1) > 2:
+                    try:
+                        from scipy.stats import ttest_rel
+                        stat, p_value = ttest_rel(insulin1, insulin2)
+                        significance = "Significant" if p_value < 0.05 else "Not significant"
+                        st.metric("Statistical Test", significance, f"p={p_value:.3f}")
+                    except:
+                        st.info("Install scipy for statistical tests")
+            
+            # Trend analysis
+            st.markdown("**Trend Analysis**")
+            if auc1 > auc2:
+                if 'glucose' in st.session_state:
+                    st.success(f"✅ Glucose response improved from {date2} to {date1}")
+                else:
+                    st.warning(f"⚠️ Glucose response worsened from {date2} to {date1}")
+            else:
+                st.info(f"📊 Glucose response changed from {date2} to {date1}")
+    else:
+        st.info("Need at least 2 test dates for comparison")
+
 # Save changes with enhanced validation
 if st.button("Save Changes"):
     valid = True
@@ -697,3 +766,174 @@ st.download_button(
     file_name="edited_glucose_insulin_data.csv",
     mime="text/csv"
 )
+
+# Additional Features Section
+st.markdown('<p class="subtitle">Additional Tools</p>', unsafe_allow_html=True)
+
+tool_col1, tool_col2, tool_col3 = st.columns(3)
+
+with tool_col1:
+    st.markdown("#### 📊 Data Summary")
+    with st.expander("View Data Statistics"):
+        current_date = dates[0]
+        
+        # Glucose statistics
+        st.markdown("**Glucose Stats:**")
+        glucose_values = glucose_df[current_date].values
+        st.write(f"• Mean: {np.mean(glucose_values):.1f} mg/dL")
+        st.write(f"• Peak: {np.max(glucose_values):.1f} mg/dL")
+        st.write(f"• Range: {np.ptp(glucose_values):.1f} mg/dL")
+        st.write(f"• CV: {(np.std(glucose_values)/np.mean(glucose_values)*100):.1f}%")
+        
+        st.markdown("**Insulin Stats:**")
+        insulin_values = insulin_df[current_date].values
+        st.write(f"• Mean: {np.mean(insulin_values):.1f} µU/mL")
+        st.write(f"• Peak: {np.max(insulin_values):.1f} µU/mL")
+        st.write(f"• Range: {np.ptp(insulin_values):.1f} µU/mL")
+        st.write(f"• CV: {(np.std(insulin_values)/np.mean(insulin_values)*100):.1f}%")
+
+with tool_col2:
+    st.markdown("#### 🎯 Target Zones")
+    with st.expander("Reference Ranges"):
+        st.markdown("**Normal Glucose Response:**")
+        st.write("• Fasting: 70-100 mg/dL")
+        st.write("• 2-hour: <140 mg/dL")
+        st.write("• Peak: <200 mg/dL")
+        
+        st.markdown("**Normal Insulin Response:**")
+        st.write("• Fasting: 2-25 µU/mL")
+        st.write("• Peak: 30-100 µU/mL")
+        st.write("• 2-hour: <50 µU/mL")
+        
+        st.markdown("**Interpretation Guidelines:**")
+        st.write("• Glucose >200 mg/dL → Diabetes risk")
+        st.write("• Glucose 140-199 mg/dL → Impaired tolerance")
+        st.write("• High insulin → Insulin resistance")
+        st.write("• Low insulin → Beta-cell dysfunction")
+
+with tool_col3:
+    st.markdown("#### 💡 Recommendations")
+    with st.expander("Next Steps"):
+        # Generate personalized recommendations based on current data
+        current_glucose = glucose_df[current_date].values
+        current_insulin = insulin_df[current_date].values
+        
+        recommendations = []
+        
+        if max(current_glucose) > 200:
+            recommendations.append("🔴 Consult healthcare provider about diabetes risk")
+        elif max(current_glucose) > 140:
+            recommendations.append("🟡 Consider lifestyle modifications")
+        else:
+            recommendations.append("🟢 Maintain current healthy habits")
+        
+        if max(current_insulin) > 100:
+            recommendations.append("⚠️ Discuss insulin resistance with doctor")
+            recommendations.append("💪 Consider resistance training")
+            recommendations.append("🥗 Review carbohydrate intake")
+        
+        if current_glucose[-1] > current_glucose[0] + 20:
+            recommendations.append("⏰ Monitor glucose recovery patterns")
+        
+        for rec in recommendations:
+            st.write(f"• {rec}")
+        
+        if not recommendations:
+            st.write("• 🎉 Results appear within normal ranges")
+            st.write("• 📅 Continue regular monitoring")
+            st.write("• 🏃‍♀️ Maintain active lifestyle")
+
+# Quick Actions
+st.markdown("#### Quick Actions")
+action_col1, action_col2, action_col3, action_col4 = st.columns(4)
+
+with action_col1:
+    if st.button("🔄 Reset to Sample Data"):
+        # Reset to original sample data
+        data = {
+            'time': [0, 30, 60, 90] * 2,
+            'type': ['glucose'] * 4 + ['insulin'] * 4,
+            'Sept 2022': [103, 158, 142, 159] + [12, 72, 78, 107],
+            'Feb 2025': [91, 148, 119, 85] + [8, 66, 75, 37],
+            'reference': [90, 140, 120, 100] + [6, 40, 30, 20]
+        }
+        st.session_state.df = pd.DataFrame(data)
+        st.success("Reset to sample data!")
+        st.rerun()
+
+with action_col2:
+    if st.button("📋 Copy Data Format"):
+        format_example = """time,type,Feb 2025,reference
+0,glucose,91,90
+30,glucose,148,140
+60,glucose,119,120
+90,glucose,85,100
+0,insulin,8,6
+30,insulin,66,40
+60,insulin,75,30
+90,insulin,37,20"""
+        st.code(format_example, language="csv")
+
+with action_col3:
+    if st.button("📈 Generate Report"):
+        # Create a summary report
+        current_date = dates[0]
+        current_glucose = glucose_df[current_date].values
+        current_insulin = insulin_df[current_date].values
+        
+        report = f"""
+# Glucose Tolerance Test Report
+**Test Date:** {current_date}
+**Test Type:** 75g Oral Glucose Tolerance Test
+
+## Results Summary
+- **Baseline Glucose:** {current_glucose[0]:.1f} mg/dL
+- **Peak Glucose:** {max(current_glucose):.1f} mg/dL at {time_points[np.argmax(current_glucose)]} minutes
+- **2-hour Glucose:** {current_glucose[-1]:.1f} mg/dL
+- **Glucose AUC:** {calculate_auc(time_points, current_glucose):.0f} mg·min/dL
+
+- **Baseline Insulin:** {current_insulin[0]:.1f} µU/mL
+- **Peak Insulin:** {max(current_insulin):.1f} µU/mL at {time_points[np.argmax(current_insulin)]} minutes
+- **2-hour Insulin:** {current_insulin[-1]:.1f} µU/mL
+- **Insulin AUC:** {calculate_auc(time_points, current_insulin):.0f} µU·min/mL
+
+## Clinical Interpretation
+### Glucose Response:
+{chr(10).join(f"• {interp}" for interp in interpret_glucose_response(current_glucose, time_points))}
+
+### Insulin Response:
+{chr(10).join(f"• {interp}" for interp in interpret_insulin_response(current_insulin, time_points))}
+
+*This report is for informational purposes only and should not replace professional medical advice.*
+        """
+        
+        st.download_button(
+            label="Download Report",
+            data=report,
+            file_name=f"ogtt_report_{current_date.replace(' ', '_')}.md",
+            mime="text/markdown"
+        )
+
+with action_col4:
+    if st.button("⚙️ Advanced Settings"):
+        with st.expander("Advanced Configuration", expanded=True):
+            st.markdown("**Calculation Settings:**")
+            auc_method = st.selectbox("AUC Method", ["Trapezoidal", "Simpson's Rule"])
+            baseline_correction = st.checkbox("Baseline Correction", value=False)
+            
+            st.markdown("**Clinical Thresholds:**")
+            glucose_threshold = st.slider("Glucose Alert Threshold", 140, 250, 200)
+            insulin_threshold = st.slider("Insulin Alert Threshold", 50, 150, 100)
+            
+            if st.button("Apply Settings"):
+                st.success("Settings applied!")
+
+# Footer with app information
+st.markdown("---")
+st.markdown("""
+<div style='text-align: center; color: #666; font-size: 0.9em; padding: 20px;'>
+    <p><strong>Glucose & Insulin Response Analyzer</strong> v2.0</p>
+    <p>Built with Streamlit & Plotly | For research and educational purposes</p>
+    <p>⚠️ <em>Not intended for clinical diagnosis - always consult healthcare professionals</em></p>
+</div>
+""", unsafe_allow_html=True)
