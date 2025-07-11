@@ -131,118 +131,260 @@ def create_ogtt_plot(df):
     # Add Glucose trace
     fig.add_trace(
         go.Scatter(
-            x=df['Time'],
-            y=df['Glucose'],
-            name='Glucose (mg/dL)',
-            mode='lines+markers',
-            marker=dict(color='#1f77b4', size=10),
-            line=dict(width=3)
+            x=time,
+            y=current_values,
+            mode=mode,
+            line=dict(color=colors['current'], width=line_width),
+            marker=dict(
+                size=marker_size,
+                color=colors['current']
+            ),
+            text=current_values.round(1),
+            textposition='top center',
+            textfont=dict(
+                family="Avenir",
+                size=annotation_size,
+                color="black"
+            ),
+            name=f"{current_date}",
+            showlegend=(row == 1),  # Only show in legend for first plot
+            legendgroup=current_date
         ),
-        secondary_y=False,
+        row=row, col=1
     )
-
-    # Add Insulin trace
-    fig.add_trace(
-        go.Scatter(
-            x=df['Time'],
-            y=df['Insulin'],
-            name='Insulin (µU/mL)',
-            mode='lines+markers',
-            marker=dict(color='#ff7f0e', size=10),
-            line=dict(width=3, dash='dash')
-        ),
-        secondary_y=True,
-    )
-
-    # Add critical glucose lines
-    fig.add_hline(y=140, line_dash="dot",
-                  annotation_text="IGT Threshold (2h)",
-                  annotation_position="bottom right",
-                  secondary_y=False, line_color="red")
-    fig.add_hline(y=100, line_dash="dot",
-                  annotation_text="Normal Fasting Upper Limit",
-                  annotation_position="top right",
-                  secondary_y=False, line_color="green")
-
-
-    # Set titles and labels
-    fig.update_layout(
-        title_text="<b>OGTT Glucose and Insulin Response</b>",
-        template="plotly_white",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-    )
-    fig.update_xaxes(title_text="Time (minutes)")
-    fig.update_yaxes(title_text="<b>Glucose (mg/dL)</b>", secondary_y=False, color='#1f77b4')
-    fig.update_yaxes(title_text="<b>Insulin (µU/mL)</b>", secondary_y=True, color='#ff7f0e')
-
-    return fig
-
-# --- Streamlit UI ---
-
-st.title("🔬 OGTT Analyzer")
-st.markdown("""
-This application analyzes Oral Glucose Tolerance Test (OGTT) data to provide insights into metabolic health. 
-Upload your data to visualize the glucose and insulin curves and calculate key metabolic indices.
-**Disclaimer:** This is an educational tool and not a substitute for professional medical advice.
-""")
-
-# --- Sidebar for Data Input ---
-with st.sidebar:
-    st.header("Input OGTT Data")
-    st.markdown("Units: Glucose in **mg/dL**, Insulin in **µU/mL**.")
     
-    input_method = st.radio(
-        "Choose your data input method:",
-        ("Manual Input", "Paste Data", "Upload CSV")
-    )
-
-    data = None
-    df = None
-    
-    # Standard time points
-    time_points = [0, 30, 60, 90, 120]
-
-    if input_method == "Manual Input":
-        st.subheader("Manual Entry")
-        cols = st.columns(len(time_points))
-        glucose_values = []
-        insulin_values = []
-        for i, t in enumerate(time_points):
-            with cols[i]:
-                st.markdown(f"**{t} min**")
-                glucose_values.append(st.number_input(f"Gluc {t}", key=f"g{t}", min_value=0.0, step=1.0, value=None))
-                insulin_values.append(st.number_input(f"Ins {t}", key=f"i{t}", min_value=0.0, step=0.1, value=None))
+    # Add shading between current line and reference where current > reference
+    if show_shading:
+        # For proper shading, we need to create fill areas only where current is above reference
+        # We'll create a combined array with None values separating segments
+        x_combined = []
+        y_current = []
+        y_reference = []
         
-        if all(g is not None and i is not None for g, i in zip(glucose_values, insulin_values)):
-            data = {'Time': time_points, 'Glucose': glucose_values, 'Insulin': insulin_values}
-            df = pd.DataFrame(data)
+        for i in range(len(time)):
+            if current_values[i] > reference_values[i]:
+                # This point is above reference, include it
+                x_combined.append(time[i])
+                y_current.append(current_values[i])
+                y_reference.append(reference_values[i])
+                
+                # If this is the last point or the next point is below reference,
+                # we need to close the segment with None values
+                if i == len(time) - 1 or current_values[i+1] <= reference_values[i+1]:
+                    x_combined.append(None)
+                    y_current.append(None)
+                    y_reference.append(None)
+            else:
+                # If previous point was above reference, start a new segment
+                if i > 0 and current_values[i-1] > reference_values[i-1]:
+                    # We just crossed below, add the crossing point for a clean fill
+                    # Find where the lines cross between this point and previous point
+                    if current_values[i] != current_values[i-1]:  # Avoid division by zero
+                        # Parametric value where lines cross
+                        t = (reference_values[i-1] - current_values[i-1]) / (current_values[i] - current_values[i-1] - (reference_values[i] - reference_values[i-1]))
+                        if 0 <= t <= 1:  # Valid crossing point
+                            cross_x = time[i-1] + t * (time[i] - time[i-1])
+                            cross_y = reference_values[i-1] + t * (reference_values[i] - reference_values[i-1])
+                            x_combined.append(cross_x)
+                            y_current.append(cross_y)
+                            y_reference.append(cross_y)
+                            x_combined.append(None)
+                            y_current.append(None)
+                            y_reference.append(None)
+                
+                # If the next point will be above reference, start including points now
+                if i < len(time) - 1 and current_values[i+1] > reference_values[i+1]:
+                    # We're about to cross above, add the crossing point for a clean fill
+                    if current_values[i+1] != current_values[i]:  # Avoid division by zero
+                        # Parametric value where lines cross
+                        t = (reference_values[i] - current_values[i]) / (current_values[i+1] - current_values[i] - (reference_values[i+1] - reference_values[i]))
+                        if 0 <= t <= 1:  # Valid crossing point
+                            cross_x = time[i] + t * (time[i+1] - time[i])
+                            cross_y = reference_values[i] + t * (reference_values[i+1] - reference_values[i])
+                            x_combined.append(cross_x)
+                            y_current.append(cross_y)
+                            y_reference.append(cross_y)
+        
+        # Only add shading if we have points to shade
+        if len(x_combined) > 0:
+            # Add reference line as lower bound
+            fig.add_trace(
+                go.Scatter(
+                    x=x_combined,
+                    y=y_reference,
+                    mode='lines',
+                    line=dict(width=0),
+                    showlegend=False,
+                    hoverinfo='skip'
+                ),
+                row=row, col=1
+            )
+            
+            # Add current line as upper bound with fill
+            fig.add_trace(
+                go.Scatter(
+                    x=x_combined,
+                    y=y_current,
+                    fill='tonexty',
+                    mode='lines',
+                    line=dict(width=0),
+                    fillcolor=colors['shading'],
+                    showlegend=False,
+                    name='Above Reference',
+                    hoverinfo='skip'
+                ),
+                row=row, col=1
+            )
+    
+    # Add previous data
+    if len(dates) > 1:
+        for prev_date in dates[1:]:
+            fig.add_trace(
+                go.Scatter(
+                    x=time,
+                    y=df[prev_date].values,
+                    name=f"{prev_date}",
+                    mode=mode,
+                    line=dict(color=colors['previous'], width=line_width),
+                    marker=dict(size=marker_size, color=colors['previous']),
+                    text=df[prev_date].values.round(1),
+                    textposition='top center',
+                    textfont=dict(
+                        family="Avenir",
+                        size=annotation_size,
+                        color="black"
+                    ),
+                    showlegend=(row == 1),  # Only show in legend for first plot
+                    legendgroup=prev_date
+                ),
+                row=row, col=1
+            )
+    
+    # Add reference line
+    if show_reference:
+        fig.add_trace(
+            go.Scatter(
+                x=time,
+                y=df['reference'].values,
+                name="Reference",
+                mode=mode,
+                line=dict(color=colors['reference'], width=line_width, dash='dash'),
+                marker=dict(size=marker_size, color=colors['reference']),
+                text=df['reference'].values.round(1),
+                textposition='top center',
+                textfont=dict(
+                    family="Avenir",
+                    size=annotation_size,
+                    color="black"
+                ),
+                showlegend=(row == 1),  # Only show reference in legend once
+                legendgroup='reference'
+            ),
+            row=row, col=1
+        )
 
-    elif input_method == "Paste Data":
-        st.subheader("Paste from Spreadsheet")
-        st.markdown("Paste data with 3 columns: Time, Glucose, Insulin (no headers).")
-        pasted_data = st.text_area("Paste data here", height=150, placeholder="0\t85\t5.0\n30\t155\t50.0\n60\t130\t65.0\n90\t100\t35.0\n120\t90\t15.0")
-        if pasted_data:
-            try:
-                data_io = io.StringIO(pasted_data)
-                df = pd.read_csv(data_io, sep=r'\s+', header=None, names=['Time', 'Glucose', 'Insulin'])
-                st.success("Data pasted successfully!")
-            except Exception as e:
-                st.error(f"Error parsing data: {e}. Please ensure it's in the correct format (Time, Glucose, Insulin separated by spaces or tabs).")
+# Add traces
+add_traces(glucose_df, 1, "Glucose")
+add_traces(insulin_df, 2, "Insulin")
 
-    elif input_method == "Upload CSV":
-        st.subheader("Upload a CSV file")
-        st.markdown("CSV should have 3 columns: 'Time', 'Glucose', 'Insulin'.")
-        uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
-        if uploaded_file is not None:
-            try:
-                df = pd.read_csv(uploaded_file)
-                if not all(col in df.columns for col in ['Time', 'Glucose', 'Insulin']):
-                     st.error("CSV must contain 'Time', 'Glucose', and 'Insulin' columns.")
-                     df = None
-                else:
-                    st.success("File uploaded successfully!")
-            except Exception as e:
-                st.error(f"Error reading file: {e}")
+    # Add proper subplot titles after figure creation
+fig.update_layout(
+    height=1200,  # Increased height
+    showlegend=True,
+    template='plotly_white',
+    plot_bgcolor='rgba(0,0,0,0)',  # Transparent plot area
+    paper_bgcolor='rgba(0,0,0,0)',
+    # Add proper titles for each subplot with adjusted positions
+    annotations=[
+        dict(
+            text=f'Glucose Response to 75g Dextrose ({dates[0]} vs {dates[1] if len(dates) > 1 else "Reference"})',
+            font=dict(family="Cormorant Garamond", size=28, color="Black"),
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=1.09,  # Moved down a bit
+            showarrow=False
+        ),
+        dict(
+            text=f'Insulin Response to 75g Dextrose ({dates[0]} vs {dates[1] if len(dates) > 1 else "Reference"})',
+            font=dict(family="Cormorant Garamond", size=28, color="Black"),
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.48,  # Moved up to avoid overlap
+            showarrow=False
+        )
+    ],
+    legend=dict(
+        yanchor="top",
+        y=1.18,  # Moved higher up
+        xanchor="center",
+        x=0.5,
+        font=dict(family="Avenir"),
+        orientation="h"
+    ),
+    font=dict(family="Avenir"),
+    margin=dict(t=200, r=50, b=50, l=50)  # Further increased top margin
+)
+
+# Update axes
+fig.update_xaxes(
+    title_text="Time (minutes)", 
+    title_font=dict(family="Avenir"), 
+    tickfont=dict(family="Avenir"),
+    tickmode='array',
+    tickvals=[0, 30, 60, 90, 120]
+)
+
+# Calculate y-axis ranges with padding
+def get_axis_range(df, padding_percent=0.15):
+    min_val = df[dates + ['reference']].min().min()
+    max_val = df[dates + ['reference']].max().max()
+    range_val = max_val - min_val
+    padding = range_val * padding_percent
+    return [min_val - padding, max_val + padding]
+
+# Update y-axes with calculated ranges
+glucose_range = get_axis_range(glucose_df)
+insulin_range = get_axis_range(insulin_df)
+
+fig.update_yaxes(
+    title_text="Glucose (mg/dL)", 
+    range=glucose_range,
+    title_font=dict(family="Avenir"), 
+    tickfont=dict(family="Avenir"), 
+    row=1, 
+    col=1
+)
+fig.update_yaxes(
+    title_text="Insulin (µU/mL)", 
+    range=insulin_range,
+    title_font=dict(family="Avenir"), 
+    tickfont=dict(family="Avenir"), 
+    row=2, 
+    col=1
+)
+
+# Display charts in a container
+st.markdown('<p class="subtitle">Visualization</p>', unsafe_allow_html=True)
+with st.container():
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Add download button for PNG if kaleido is installed
+    if KALEIDO_INSTALLED:
+        if st.button("Download Plots as PNG"):
+            # Convert plot to PNG
+            img_bytes = fig.to_image(format="png", width=1200, height=1200, scale=2)
+            
+            # Create download button
+            st.download_button(
+                label="Click to Download PNG",
+                data=img_bytes,
+                file_name="glucose_insulin_response.png",
+                mime="image/png"
+            )
+    else:
+        st.info("To enable PNG download, install the kaleido package using: pip install kaleido")
 
 
 # --- Main Panel for Results ---
