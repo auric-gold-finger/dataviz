@@ -167,7 +167,7 @@ with st.sidebar:
             st.info("Expected CSV format: Date, Glucose_0, Glucose_30, Glucose_60, Glucose_90, Insulin_0, Insulin_30, Insulin_60, Insulin_90")
     
     # Manual test input
-    num_tests = st.number_input("Number of tests:", min_value=1, max_value=10, value=1, step=1)
+    num_tests = st.number_input("Number of tests:", min_value=1, max_value=10, value=2, step=1)
     
     if st.button("Clear All Tests"):
         st.session_state.test_data = {}
@@ -203,8 +203,13 @@ with st.sidebar:
         annotation_size = st.slider("Text size", 8, 48, 12)
         annotation_bold = st.checkbox("Bold text", value=True)
         annotation_color = st.color_picker("Text color", "#2c3e50")
-        annotation_bg_color = st.color_picker("Background color", "#ffffff")
-        annotation_border_color = st.color_picker("Border color", "#cccccc")
+        show_annotation_bg = st.checkbox("Show annotation background", value=False)
+        if show_annotation_bg:
+            annotation_bg_color = st.color_picker("Background color", "#ffffff")
+            annotation_border_color = st.color_picker("Border color", "#cccccc")
+        else:
+            annotation_bg_color = "rgba(255, 255, 255, 0)"
+            annotation_border_color = "rgba(0, 0, 0, 0)"
     
     # Typography
     with st.expander("Typography"):
@@ -270,9 +275,9 @@ for i in range(num_tests):
         
         # Parse and auto-save data
         try:
-            times = [int(x.strip()) for x in time_input.split(',')]
-            glucose_vals = [int(x.strip()) for x in glucose_input.split(',')]
-            insulin_vals = [int(x.strip()) for x in insulin_input.split(',')]
+            times = [float(x.strip()) for x in time_input.split(',')]
+            glucose_vals = [float(x.strip()) for x in glucose_input.split(',')]
+            insulin_vals = [float(x.strip()) for x in insulin_input.split(',')]
             
             if len(times) >= 4 and len(glucose_vals) >= 4 and len(insulin_vals) >= 4:
                 # Auto-save to session state
@@ -533,8 +538,8 @@ def create_multi_test_plot(title, y_label, reference_data, reference_name, is_gl
                         font=dict(family="Avenir, sans-serif", size=annotation_size, color=annotation_color),
                         bgcolor=annotation_bg_color,
                         bordercolor=annotation_border_color,
-                        borderwidth=1,
-                        borderpad=4
+                        borderwidth=1 if show_annotation_bg else 0,
+                        borderpad=4 if show_annotation_bg else 0
                     )
     
     # Layout
