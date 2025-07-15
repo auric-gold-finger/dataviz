@@ -41,11 +41,6 @@ div[data-testid="metric-container"] {
     padding: 16px;
 }
 
-/* Compact columns */
-.compact-input {
-    padding: 0.25rem;
-}
-
 /* Simple header */
 .simple-header {
     text-align: center;
@@ -77,175 +72,237 @@ div[data-testid="metric-container"] {
 .normal { border-left-color: #27ae60; }
 .warning { border-left-color: #f39c12; }
 .concern { border-left-color: #e74c3c; }
+
+/* Test sections */
+.test-section {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 0.5rem 0;
+}
 </style>
 """, unsafe_allow_html=True)
+
+# Initialize session state for multiple tests
+if 'test_data' not in st.session_state:
+    st.session_state.test_data = {}
 
 # Compact header
 st.markdown("""
 <div class="simple-header">
     <h1>OGTT Analyzer</h1>
-    <p>Oral Glucose Tolerance Test Analysis</p>
+    <p>Multi-Test OGTT Analysis with Simultaneous Graphing</p>
 </div>
 """, unsafe_allow_html=True)
 
-# Reorganized sidebar controls
+# Sidebar controls
 with st.sidebar:
-    st.header("⚙️ Settings")
+    st.header("Settings")
     
-    # Data input first (most important)
-    st.subheader("📊 Data Input")
-    input_method = st.radio("Choose input method:", ["Manual Entry", "CSV Upload", "Paste Data"])
+    # Test management
+    st.subheader("Test Management")
     
-    # Chart appearance (commonly used)
-    with st.expander("🎨 Chart Appearance", expanded=True):
-        glucose_color = st.color_picker("Glucose line color", "#2E86C1")
-        insulin_color = st.color_picker("Insulin line color", "#3498DB")
-        line_width = st.slider("Line width", 1, 10, 5)
-        marker_size = st.slider("Marker size", 4, 20, 13)
+    # CSV Upload
+    uploaded_file = st.file_uploader("Upload CSV file", type=['csv'])
+    
+    if uploaded_file is not None:
+        try:
+            df = pd.read_csv(uploaded_file)
+            st.write("CSV Preview:")
+            st.dataframe(df.head())
+            
+            if st.button("Load from CSV"):
+                st.session_state.test_data = {}
+                
+                # Expected columns: Date, Time_0, Time_30, Time_60, Time_90, Glucose_0, Glucose_30, Glucose_60, Glucose_90, Insulin_0, Insulin_30, Insulin_60, Insulin_90
+                colors = ['#2E86C1', '#E74C3C', '#28B463', '#F39C12', '#8E44AD', '#17A2B8', '#FD7E14', '#6C757D', '#DC3545', '#20C997']
+                
+                for i, row in df.iterrows():
+                    test_id = i + 1
+                    color = colors[i % len(colors)]
+                    
+                    # Parse times - use defaults if not provided
+                    if 'Time_0' in df.columns:
+                        times = [row.get('Time_0', 0), row.get('Time_30', 30), row.get('Time_60', 60), row.get('Time_90', 90)]
+                    else:
+                        times = [0, 30, 60, 90]
+                    
+                    # Parse glucose values
+                    glucose = [
+                        row.get('Glucose_0', 88),
+                        row.get('Glucose_30', 119),
+                        row.get('Glucose_60', 92),
+                        row.get('Glucose_90', 80)
+                    ]
+                    
+                    # Parse insulin values
+                    insulin = [
+                        row.get('Insulin_0', 8),
+                        row.get('Insulin_30', 50),
+                        row.get('Insulin_60', 70),
+                        row.get('Insulin_90', 40)
+                    ]
+                    
+                    # Parse date
+                    date_str = row.get('Date', datetime.now().strftime('%Y-%m-%d'))
+                    try:
+                        parsed_date = pd.to_datetime(date_str).strftime('%Y-%m-%d')
+                    except:
+                        parsed_date = datetime.now().strftime('%Y-%m-%d')
+                    
+                    st.session_state.test_data[test_id] = {
+                        'date': parsed_date,
+                        'times': times,
+                        'glucose': glucose,
+                        'insulin': insulin,
+                        'color': color
+                    }
+                
+                st.success(f"Loaded {len(df)} tests from CSV")
+                st.rerun()
         
-        show_shading = st.checkbox("Show comparative shading", value=False)
-        show_reference = st.checkbox("Show reference line", value=True)
+        except Exception as e:
+            st.error(f"Error loading CSV: {str(e)}")
+            st.info("Expected CSV format: Date, Glucose_0, Glucose_30, Glucose_60, Glucose_90, Insulin_0, Insulin_30, Insulin_60, Insulin_90")
     
-    # Reference line details (collapsed by default)
-    with st.expander("📏 Reference Line Details"):
+    # Manual test input
+    num_tests = st.number_input("Number of tests:", min_value=1, max_value=10, value=2, step=1)
+    
+    if st.button("Clear All Tests"):
+        st.session_state.test_data = {}
+        st.rerun()
+    
+    # Chart appearance
+    with st.expander("Chart Appearance", expanded=True):
+        line_width = st.slider("Line width", 1, 10, 4)
+        marker_size = st.slider("Marker size", 4, 20, 10)
+        show_shading = st.checkbox("Show comparative shading", value=True)
+        show_reference = st.checkbox("Show reference line", value=True)
+        show_legend = st.checkbox("Show legend", value=True)
+    
+    # Test visibility toggles
+    if st.session_state.test_data:
+        st.subheader("Test Visibility")
+        test_visibility = {}
+        for test_id in st.session_state.test_data.keys():
+            test_date = st.session_state.test_data[test_id].get('date', f'Test {test_id}')
+            test_visibility[test_id] = st.checkbox(f"Show {test_date}", value=True, key=f"vis_{test_id}")
+    else:
+        test_visibility = {}
+    
+    # Reference line details
+    with st.expander("Reference Line Details"):
         reference_color = st.color_picker("Reference line color", "#1cb164")
         reference_opacity = st.slider("Reference line opacity", 0.1, 1.0, 0.5, 0.1)
         reference_width = st.slider("Reference line width", 1, 10, 3)
     
-    # Annotations (commonly used)
-    with st.expander("📝 Annotations", expanded=True):
+    # Annotations
+    with st.expander("Annotations"):
         show_annotations = st.checkbox("Show value annotations", value=True)
-        show_reference_annotations = st.checkbox("Show reference annotations", value=False)
-        annotation_size = st.slider("Text size", 8, 48, 24)
+        annotation_size = st.slider("Text size", 8, 48, 12)
         annotation_bold = st.checkbox("Bold text", value=True)
         annotation_color = st.color_picker("Text color", "#2c3e50")
+        annotation_bg_color = st.color_picker("Background color", "#ffffff")
+        annotation_border_color = st.color_picker("Border color", "#cccccc")
     
-    # Typography (for power users)
-    with st.expander("🔤 Typography"):
-        title_font_size = st.slider("Chart title size", 12, 72, 38)
-        axis_title_size = st.slider("Axis title size", 8, 48, 24)
-        axis_tick_size = st.slider("Axis tick size", 6, 36, 18)
+    # Typography
+    with st.expander("Typography"):
+        title_font_size = st.slider("Chart title size", 12, 72, 32)
+        axis_title_size = st.slider("Axis title size", 8, 48, 20)
+        axis_tick_size = st.slider("Axis tick size", 6, 36, 16)
     
-    # Export settings (less frequently used)
-    with st.expander("💾 Export Settings"):
+    # Export settings
+    with st.expander("Export Settings"):
         download_width = st.slider("Width (px)", 800, 4000, 1200, step=200)
         download_height = st.slider("Height (px)", 400, 3000, 550, step=50)
         download_scale = st.slider("Scale multiplier", 1, 10, 1)
-        st.caption(f"Final: {download_width * download_scale} × {download_height * download_scale} px")
-        st.caption("💡 Optimized for presentations")
 
-# Compact data input based on method
-if input_method == "Manual Entry":
-    st.markdown("### Quick Entry")
-    # Three text input boxes for comma-separated values
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("**Time Points (min)**")
-        time_input = st.text_input("", value="0, 30, 60, 90", key="times")
-        
-    with col2:
-        st.markdown("**Glucose (mg/dL)**")
-        glucose_input = st.text_input("", value="88, 119, 92, 80", key="glucose")
-        
-    with col3:
-        st.markdown("**Insulin (μU/mL)**")
-        insulin_input = st.text_input("", value="8, 50, 70, 40", key="insulin")
-    
-    # Parse the comma-separated values
-    try:
-        times = [float(x.strip()) for x in time_input.split(',')]
-        glucose_vals = [float(x.strip()) for x in glucose_input.split(',')]
-        insulin_vals = [float(x.strip()) for x in insulin_input.split(',')]
-        
-        if len(times) >= 4 and len(glucose_vals) >= 4 and len(insulin_vals) >= 4:
-            g0, g30, g60, g90 = glucose_vals[:4]
-            i0, i30, i60, i90 = insulin_vals[:4]
-            times = times[:4]  # Use first 4 time points
-        else:
-            st.error("Please provide at least 4 values for each measurement")
-            g0, g30, g60, g90 = 88, 119, 92, 80
-            i0, i30, i60, i90 = 8, 50, 70, 40
-            times = [0, 30, 60, 90]
-    except:
-        st.error("Please enter valid numbers separated by commas")
-        g0, g30, g60, g90 = 88, 119, 92, 80
-        i0, i30, i60, i90 = 8, 50, 70, 40
-        times = [0, 30, 60, 90]
+# Test input section
+st.markdown("### Test Data Entry")
 
-elif input_method == "CSV Upload":
-    st.subheader("Upload CSV File")
-    st.write("Expected format: columns for Time, Glucose, Insulin")
-    uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
-    
-    if uploaded_file is not None:
-        df = pd.read_csv(uploaded_file)
-        st.write("Uploaded data:")
-        st.dataframe(df)
-        
-        # Try to extract values (assuming standard format)
-        if len(df) >= 4:
-            glucose_vals = df['Glucose'].tolist()[:4] if 'Glucose' in df.columns else [88, 119, 92, 80]
-            insulin_vals = df['Insulin'].tolist()[:4] if 'Insulin' in df.columns else [8, 50, 70, 40]
-            times = df['Time'].tolist()[:4] if 'Time' in df.columns else [0, 30, 60, 90]
-            g0, g30, g60, g90 = glucose_vals
-            i0, i30, i60, i90 = insulin_vals
-        else:
-            st.error("CSV must contain at least 4 time points")
-            g0, g30, g60, g90 = 88, 119, 92, 80
-            i0, i30, i60, i90 = 8, 50, 70, 40
-            times = [0, 30, 60, 90]
-    else:
-        # Default values
-        g0, g30, g60, g90 = 88, 119, 92, 80
-        i0, i30, i60, i90 = 8, 50, 70, 40
-        times = [0, 30, 60, 90]
+# Color palette for tests
+colors = ['#2E86C1', '#E74C3C', '#28B463', '#F39C12', '#8E44AD', '#17A2B8', '#FD7E14', '#6C757D', '#DC3545', '#20C997']
 
-else:  # Paste Data
-    st.subheader("Paste Tab-Separated Data")
-    st.write("Format: Time | Glucose | Insulin (one row per time point)")
+# Create input sections for each test
+for i in range(num_tests):
+    test_id = i + 1
+    color = colors[i % len(colors)]
     
-    pasted_data = st.text_area("Paste your data here:", height=100)
-    
-    if pasted_data:
+    with st.expander(f"Test {test_id}", expanded=True):
+        # Only date input - no separate name field
+        test_date = st.date_input(
+            "Date:",
+            value=datetime.strptime(st.session_state.test_data.get(test_id, {}).get('date', datetime.now().strftime('%Y-%m-%d')), '%Y-%m-%d').date(),
+            key=f"date_{test_id}"
+        )
+        
+        # Data input
+        col1, col2, col3 = st.columns(3)
+        
+        default_times = st.session_state.test_data.get(test_id, {}).get('times', [0, 30, 60, 90])
+        default_glucose = st.session_state.test_data.get(test_id, {}).get('glucose', [88, 119, 92, 80])
+        default_insulin = st.session_state.test_data.get(test_id, {}).get('insulin', [8, 50, 70, 40])
+        
+        with col1:
+            st.markdown("**Time Points (min)**")
+            time_input = st.text_input(
+                "", 
+                value=", ".join(map(str, default_times)),
+                key=f"times_{test_id}"
+            )
+            
+        with col2:
+            st.markdown("**Glucose (mg/dL)**")
+            glucose_input = st.text_input(
+                "", 
+                value=", ".join(map(str, default_glucose)),
+                key=f"glucose_{test_id}"
+            )
+            
+        with col3:
+            st.markdown("**Insulin (μU/mL)**")
+            insulin_input = st.text_input(
+                "", 
+                value=", ".join(map(str, default_insulin)),
+                key=f"insulin_{test_id}"
+            )
+        
+        # Parse and auto-save data
         try:
-            lines = pasted_data.strip().split('\n')
-            times = []
-            glucose_vals = []
-            insulin_vals = []
+            times = [float(x.strip()) for x in time_input.split(',')]
+            glucose_vals = [float(x.strip()) for x in glucose_input.split(',')]
+            insulin_vals = [float(x.strip()) for x in insulin_input.split(',')]
             
-            for line in lines:
-                parts = line.split('\t') if '\t' in line else line.split()
-                if len(parts) >= 3:
-                    times.append(float(parts[0]))
-                    glucose_vals.append(float(parts[1]))
-                    insulin_vals.append(float(parts[2]))
-            
-            if len(glucose_vals) >= 4:
-                g0, g30, g60, g90 = glucose_vals[:4]
-                i0, i30, i60, i90 = insulin_vals[:4]
-                times = times[:4]
+            if len(times) >= 4 and len(glucose_vals) >= 4 and len(insulin_vals) >= 4:
+                # Auto-save to session state
+                st.session_state.test_data[test_id] = {
+                    'date': test_date.strftime('%Y-%m-%d'),
+                    'times': times[:4],
+                    'glucose': glucose_vals[:4],
+                    'insulin': insulin_vals[:4],
+                    'color': color
+                }
             else:
-                st.error("Please provide at least 4 time points")
-                g0, g30, g60, g90 = 88, 119, 92, 80
-                i0, i30, i60, i90 = 8, 50, 70, 40
-                times = [0, 30, 60, 90]
+                if test_id not in st.session_state.test_data:
+                    st.session_state.test_data[test_id] = {
+                        'date': test_date.strftime('%Y-%m-%d'),
+                        'times': [0, 30, 60, 90],
+                        'glucose': [88, 119, 92, 80],
+                        'insulin': [8, 50, 70, 40],
+                        'color': color
+                    }
         except:
-            st.error("Error parsing data. Please check format.")
-            g0, g30, g60, g90 = 88, 119, 92, 80
-            i0, i30, i60, i90 = 8, 50, 70, 40
-            times = [0, 30, 60, 90]
-    else:
-        # Default values
-        g0, g30, g60, g90 = 88, 119, 92, 80
-        i0, i30, i60, i90 = 8, 50, 70, 40
-        times = [0, 30, 60, 90]
+            if test_id not in st.session_state.test_data:
+                st.session_state.test_data[test_id] = {
+                    'date': test_date.strftime('%Y-%m-%d'),
+                    'times': [0, 30, 60, 90],
+                    'glucose': [88, 119, 92, 80],
+                    'insulin': [8, 50, 70, 40],
+                    'color': color
+                }
 
-# Data preparation
-glucose = [g0, g30, g60, g90]
-insulin = [i0, i30, i60, i90]
-
-# Reference patterns (simplified)
+# Reference patterns
 normal_glucose = [90, 140, 120, 95]
 normal_insulin = [6, 40, 30, 20]
 
@@ -253,7 +310,6 @@ normal_insulin = [6, 40, 30, 20]
 def calculate_glucotype(glucose_vals):
     """
     Improved glucotype classification based on Hall et al. research
-    Focus on proper monophasic vs biphasic identification
     """
     g0, g30, g60, g90 = glucose_vals
     
@@ -265,8 +321,6 @@ def calculate_glucotype(glucose_vals):
     # Additional metrics
     peak_glucose = max(glucose_vals)
     peak_time = glucose_vals.index(peak_glucose) * 30
-    
-    # Return to baseline check (within 10 mg/dL of fasting)
     returns_to_baseline = g90 <= (g0 + 10)
     
     # Classify based on response patterns
@@ -277,22 +331,16 @@ def calculate_glucotype(glucose_vals):
     elif delta_30 > 0 and delta_60 > 0 and delta_90 > 0:
         return "Continuous Rise", "concern"
     elif peak_time == 30:
-        # Peak at 30min - check what happens after
         if delta_60 <= -20 and delta_90 > 10:
-            # Sharp drop then rise = biphasic
             return "Biphasic", "normal"
         elif delta_60 <= 0 and returns_to_baseline:
-            # Drops and stays down = good monophasic
             return "Monophasic", "warning"
         elif delta_60 > 0:
-            # Continues rising after 30min peak = problem
             return "Continuous Rise", "concern"
         else:
             return "Monophasic", "warning"
     elif peak_time == 60:
-        # Peak at 60min
         if delta_90 <= -15:
-            # Good decline after 60min peak
             if returns_to_baseline:
                 return "Delayed Monophasic", "warning"
             else:
@@ -302,7 +350,6 @@ def calculate_glucotype(glucose_vals):
     elif peak_time == 90:
         return "Late Peak/Continuous Rise", "concern"
     else:
-        # Check for true biphasic pattern
         if g30 > g0 and g60 < g30 and g90 > g60 and g90 < g30:
             return "Biphasic", "normal"
         else:
@@ -310,43 +357,49 @@ def calculate_glucotype(glucose_vals):
 
 def calculate_kraft_type(insulin_vals, glucose_vals=None):
     """
-    Improved Kraft classification with glucose context
-    Considers glucose disposal efficiency to avoid false Type V diagnosis
+    Enhanced Kraft classification with glucose context
+    Key principle: Low insulin + good glucose control = high insulin sensitivity
     """
     i0, i30, i60, i90 = insulin_vals
     
-    # Calculate glucose disposal efficiency if available
-    glucose_disposal_efficient = False
+    # Calculate glucose metrics if available
+    glucose_well_controlled = False
+    glucose_disposal_excellent = False
     if glucose_vals:
         g0, g30, g60, g90 = glucose_vals
-        # Good glucose disposal: returns close to baseline despite lower insulin
-        glucose_disposal_efficient = (g90 <= g0 + 15) and (max(glucose_vals) < 140)
+        glucose_peak = max(glucose_vals)
+        glucose_well_controlled = glucose_peak < 140 and g90 <= g0 + 15
+        glucose_disposal_excellent = glucose_peak < 120 and g90 <= g0 + 10
     
     # Type IV: High fasting insulin
     if i0 >= 25:
         return "Type IV - High Fasting", "concern"
     
-    # Type V: Low insulin response - BUT check glucose disposal first
+    # Enhanced Type V analysis - consider glucose control
     peak_insulin = max(insulin_vals)
     if peak_insulin < 30:
-        if glucose_disposal_efficient:
-            # Low insulin but good glucose disposal = high insulin sensitivity
+        if glucose_disposal_excellent:
+            return "Type I - Exceptional Sensitivity", "normal"
+        elif glucose_well_controlled:
             return "Type I - High Sensitivity", "normal"
         else:
             return "Type V - Low Response", "concern"
     
-    # Find peak time
+    # Find peak time and characteristics
     peak_time_index = insulin_vals.index(peak_insulin)
     peak_time = peak_time_index * 30
     
-    # More nuanced Type I criteria
+    # Enhanced Type I criteria
     if peak_time == 30:
-        if i90 < (i0 + 15) and i90 < 60:
-            # Good return toward baseline
-            if i90 < 30:
+        if i90 < (i0 + 15):
+            if i90 < 30 and glucose_disposal_excellent:
+                return "Type I - Exceptional", "normal"
+            elif i90 < 40:
                 return "Type I - Normal", "normal"
-            else:
+            elif i90 < 60:
                 return "Type I/II - Borderline", "warning"
+            else:
+                return "Type II - Early Pattern", "warning"
         elif i90 >= 60:
             return "Type III - Sustained", "warning"
         else:
@@ -354,10 +407,12 @@ def calculate_kraft_type(insulin_vals, glucose_vals=None):
     
     # Type II: Delayed peak
     elif peak_time >= 60:
-        if i90 < 50:
-            return "Type II - Delayed Peak", "warning"
-        else:
+        if i90 < 50 and glucose_well_controlled:
+            return "Type II - Delayed Normal", "warning"
+        elif i90 >= 60:
             return "Type II/III - Delayed Sustained", "concern"
+        else:
+            return "Type II - Delayed Peak", "warning"
     
     # Type III: Sustained elevation
     elif i90 >= 60 or i90 > (i0 + 30):
@@ -365,25 +420,27 @@ def calculate_kraft_type(insulin_vals, glucose_vals=None):
     
     # Default classification
     else:
-        if i90 < 40:
+        if i90 < 40 and glucose_well_controlled:
             return "Type I - Normal", "normal"
+        elif i90 < 50:
+            return "Type I/II - Borderline", "warning"
         else:
             return "Type II - Early Pattern", "warning"
 
 def calculate_metrics(glucose_vals, insulin_vals):
-    """Enhanced metabolic metrics with additional calculations"""
+    """Enhanced metabolic metrics calculation"""
     g0, g30, g60, g90 = glucose_vals
     i0, i30, i60, i90 = insulin_vals
     
-    # HOMA-IR (standard)
+    # HOMA-IR
     homa_ir = (g0 * i0) / 405
     
-    # Matsuda Index (whole body insulin sensitivity)
+    # Matsuda Index
     mean_glucose = np.mean(glucose_vals)
     mean_insulin = np.mean(insulin_vals)
     matsuda = 10000 / math.sqrt(g0 * i0 * mean_glucose * mean_insulin)
     
-    # Area under curve using trapezoidal rule
+    # Area under curve
     glucose_auc = 0.5 * (g0 + g30) * 30 + 0.5 * (g30 + g60) * 30 + 0.5 * (g60 + g90) * 30
     insulin_auc = 0.5 * (i0 + i30) * 30 + 0.5 * (i30 + i60) * 30 + 0.5 * (i60 + i90) * 30
     
@@ -391,10 +448,7 @@ def calculate_metrics(glucose_vals, insulin_vals):
     glucose_peak = max(glucose_vals)
     insulin_peak = max(insulin_vals)
     
-    # Insulin sensitivity indices
-    isi_composite = matsuda  # Alternative name
-    
-    # Disposition index (beta cell function adjusted for insulin sensitivity)
+    # Disposition index
     insulinogenic_index = (i30 - i0) / (g30 - g0) if g30 > g0 else 0
     disposition_index = insulinogenic_index * matsuda
     
@@ -406,378 +460,269 @@ def calculate_metrics(glucose_vals, insulin_vals):
         'glucose_peak': glucose_peak,
         'insulin_peak': insulin_peak,
         'insulinogenic_index': insulinogenic_index,
-        'disposition_index': disposition_index,
-        'isi_composite': isi_composite
+        'disposition_index': disposition_index
     }
 
-# Enhanced plotting with CORRECTED shading logic
-def create_clean_plot(x_data, y_data, title, y_label, reference_data, reference_name, color, is_glucose=True):
+# Multi-test plotting function
+def create_multi_test_plot(title, y_label, reference_data, reference_name, is_glucose=True):
     fig = go.Figure()
     
-    # Add conditional shading FIRST (behind everything) if enabled
-    if show_shading:
-        for i in range(len(x_data) - 1):
-            # Get the points for this segment
-            x1, x2 = x_data[i], x_data[i+1]
-            y1_user, y2_user = y_data[i], y_data[i+1]
-            y1_ref, y2_ref = reference_data[i], reference_data[i+1]
-            
-            # Determine the area between the lines
-            # We need to check which line is on top for each segment
-            user_above_start = y1_user > y1_ref
-            user_above_end = y2_user > y2_ref
-            
-            if user_above_start and user_above_end:
-                # User completely above reference - BAD (RED)
-                fill_color = 'rgba(231, 76, 60, 0.05)'  # Light red
-                x_fill = [x1, x2, x2, x1]
-                y_fill = [y1_ref, y2_ref, y2_user, y1_user]
-            elif not user_above_start and not user_above_end:
-                # User completely below reference - GOOD (GREEN)
-                fill_color = 'rgba(46, 204, 113, 0.03)'  # Light green
-                x_fill = [x1, x2, x2, x1]
-                y_fill = [y1_user, y2_user, y2_ref, y1_ref]
-            else:
-                # Lines cross - need to handle intersection
-                # For simplicity, use average to determine predominant relationship
-                user_avg = (y1_user + y2_user) / 2
-                ref_avg = (y1_ref + y2_ref) / 2
-                
-                if user_avg > ref_avg:
-                    fill_color = 'rgba(231, 76, 60, 0.15)'  # Light red
-                    x_fill = [x1, x2, x2, x1]
-                    y_fill = [y1_ref, y2_ref, y2_user, y1_user]
-                else:
-                    fill_color = 'rgba(46, 204, 113, 0.15)'  # Light green
-                    x_fill = [x1, x2, x2, x1]
-                    y_fill = [y1_user, y2_user, y2_ref, y1_ref]
-            
-            # Add fill area for this segment
-            fig.add_trace(go.Scatter(
-                x=x_fill,
-                y=y_fill,
-                fill='toself',
-                fillcolor=fill_color,
-                line=dict(color='rgba(0,0,0,0)'),  # Invisible line
-                showlegend=False,
-                hoverinfo='skip'
-            ))
-    
-    # Reference line (subtle) - only show if enabled
+    # Add reference line first
     if show_reference:
         fig.add_trace(go.Scatter(
-            x=x_data, 
+            x=[0, 30, 60, 90], 
             y=reference_data,
             mode='lines',
             name=f'{reference_name} Pattern',
             line=dict(color=reference_color, width=reference_width, dash='dot'),
             opacity=reference_opacity
         ))
-        
-        # Reference annotations if enabled
-        if show_reference_annotations:
-            for i, (x, y) in enumerate(zip(x_data, reference_data)):
-                if annotation_bold:
-                    ref_text_content = f"<b>{y:.0f}</b>"
-                else:
-                    ref_text_content = f"{y:.0f}"
-                
-                fig.add_annotation(
-                    x=x, y=y,
-                    text=ref_text_content,
-                    showarrow=False,
-                    yshift=20,
-                    font=dict(
-                        family="Avenir, sans-serif", 
-                        size=annotation_size * 0.85,  # Slightly smaller than main annotations
-                        color=reference_color
-                    ),
-                    bgcolor="rgba(255, 255, 255, 0)",
-                    bordercolor="rgba(0, 0, 0, 0)",
-                    borderwidth=0
-                )
     
-    # User data (prominent) - add this after shading so it appears on top
-    fig.add_trace(go.Scatter(
-        x=x_data, 
-        y=y_data,
-        mode='lines+markers',
-        name='Your Data',
-        line=dict(color=color, width=line_width),
-        marker=dict(size=marker_size, color=color, line=dict(color='white', width=2))
-    ))
-    
-    # Data annotations - transparent background
-    if show_annotations:
-        yshift = 20
-        
-        for i, (x, y) in enumerate(zip(x_data, y_data)):
-            if annotation_bold:
-                text_content = f"<b>{y:.0f}</b>"
-            else:
-                text_content = f"{y:.0f}"
+    # Add each test
+    for test_id, test_data in st.session_state.test_data.items():
+        if test_id in test_visibility and test_visibility[test_id]:
+            test_times = test_data['times']
+            test_values = test_data['glucose'] if is_glucose else test_data['insulin']
+            test_color = test_data['color']
+            test_date = test_data['date']
             
-            fig.add_annotation(
-                x=x, y=y,
-                text=text_content,
-                showarrow=False,
-                yshift=yshift,
-                font=dict(
-                    family="Avenir, sans-serif", 
-                    size=annotation_size, 
-                    color=annotation_color
-                ),
-                bgcolor="rgba(255, 255, 255, 0)",  # Fully transparent background
-                bordercolor="rgba(0, 0, 0, 0)",  # Transparent border
-                borderwidth=0
-            )
+            # Add shading for this test if enabled
+            if show_shading and is_glucose:  # Only shade glucose for clarity
+                for i in range(len(test_times) - 1):
+                    x1, x2 = test_times[i], test_times[i+1]
+                    y1_user, y2_user = test_values[i], test_values[i+1]
+                    y1_ref, y2_ref = reference_data[i], reference_data[i+1]
+                    
+                    user_above = (y1_user + y2_user) / 2 > (y1_ref + y2_ref) / 2
+                    
+                    if user_above:
+                        fill_color = f'rgba(231, 76, 60, 0.05)'
+                    else:
+                        fill_color = f'rgba(46, 204, 113, 0.03)'
+                    
+                    x_fill = [x1, x2, x2, x1]
+                    if user_above:
+                        y_fill = [y1_ref, y2_ref, y2_user, y1_user]
+                    else:
+                        y_fill = [y1_user, y2_user, y2_ref, y1_ref]
+                    
+                    fig.add_trace(go.Scatter(
+                        x=x_fill, y=y_fill, fill='toself', fillcolor=fill_color,
+                        line=dict(color='rgba(0,0,0,0)'), showlegend=False, hoverinfo='skip'
+                    ))
+            
+            # Add test line
+            fig.add_trace(go.Scatter(
+                x=test_times, 
+                y=test_values,
+                mode='lines+markers',
+                name=test_date,  # Use date as legend name
+                line=dict(color=test_color, width=line_width),
+                marker=dict(size=marker_size, color=test_color, line=dict(color='white', width=2))
+            ))
+            
+            # Add annotations for this test with boxes
+            if show_annotations:
+                for i, (x, y) in enumerate(zip(test_times, test_values)):
+                    text_content = f"<b>{y:.0f}</b>" if annotation_bold else f"{y:.0f}"
+                    
+                    fig.add_annotation(
+                        x=x, y=y, text=text_content, 
+                        showarrow=False, 
+                        yshift=25,
+                        font=dict(family="Avenir, sans-serif", size=annotation_size, color=annotation_color),
+                        bgcolor=annotation_bg_color,
+                        bordercolor=annotation_border_color,
+                        borderwidth=1,
+                        borderpad=4
+                    )
     
-    # Typography-focused layout
+    # Layout
     fig.update_layout(
         title=dict(
             text=title,
             font=dict(family="Cormorant Garamond, serif", size=title_font_size, color='#2c3e50'),
-            x=0.5,
-            xanchor='center'
+            x=0.5, xanchor='center'
         ),
-        showlegend=False,
+        showlegend=show_legend,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        ),
         xaxis=dict(
-            title=dict(
-                text="Time (minutes)",
-                font=dict(family="Cormorant Garamond, serif", size=axis_title_size, color='#34495e')
-            ),
+            title=dict(text="Time (minutes)", font=dict(family="Cormorant Garamond, serif", size=axis_title_size, color='#34495e')),
             tickfont=dict(family="Avenir, sans-serif", size=axis_tick_size, color='#7f8c8d'),
-            showgrid=True,
-            gridcolor='#ecf0f1',
-            gridwidth=1,
-            tickmode='array',
-            tickvals=x_data,
-            ticktext=[f"{int(x)}" for x in x_data]
+            showgrid=True, gridcolor='#ecf0f1', gridwidth=1,
+            tickmode='array', tickvals=[0, 30, 60, 90], ticktext=['0', '30', '60', '90']
         ),
         yaxis=dict(
-            title=dict(
-                text=y_label,
-                font=dict(family="Cormorant Garamond, serif", size=axis_title_size, color='#34495e')
-            ),
+            title=dict(text=y_label, font=dict(family="Cormorant Garamond, serif", size=axis_title_size, color='#34495e')),
             tickfont=dict(family="Avenir, sans-serif", size=axis_tick_size, color='#7f8c8d'),
-            showgrid=True,
-            gridcolor='#ecf0f1',
-            gridwidth=1
+            showgrid=True, gridcolor='#ecf0f1', gridwidth=1
         ),
-        plot_bgcolor='rgba(0,0,0,0)',  # Transparent background
-        paper_bgcolor='rgba(0,0,0,0)',  # Transparent background
-        margin=dict(t=60, b=40, l=60, r=40),
-        font=dict(family="Avenir, sans-serif")
+        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+        margin=dict(t=80, b=40, l=60, r=40), font=dict(family="Avenir, sans-serif")
     )
     
     return fig
 
-# Create plots (removed dedicated PNG download buttons)
-st.markdown("### Glucose Response")
-fig1 = create_clean_plot(
-    times, glucose, 
-    'Glucose Response',
-    'Glucose (mg/dL)',
-    normal_glucose,
-    'Normal',
-    glucose_color,
-    is_glucose=True
-)
+# Create plots
+if st.session_state.test_data:
+    st.markdown("### Glucose Response - All Tests")
+    fig1 = create_multi_test_plot(
+        'Glucose Response Comparison', 'Glucose (mg/dL)',
+        normal_glucose, 'Normal', is_glucose=True
+    )
+    
+    st.plotly_chart(fig1, use_container_width=True, config={
+        'displayModeBar': True, 'displaylogo': False, 'modeBarButtonsToAdd': ['downloadImage'],
+        'toImageButtonOptions': {
+            'format': 'png', 'filename': 'glucose_comparison',
+            'height': download_height, 'width': download_width, 'scale': download_scale
+        }
+    })
+    
+    st.markdown("### Insulin Response - All Tests")
+    fig2 = create_multi_test_plot(
+        'Insulin Response Comparison', 'Insulin (μU/mL)',
+        normal_insulin, 'Normal', is_glucose=False
+    )
+    
+    st.plotly_chart(fig2, use_container_width=True, config={
+        'displayModeBar': True, 'displaylogo': False, 'modeBarButtonsToAdd': ['downloadImage'],
+        'toImageButtonOptions': {
+            'format': 'png', 'filename': 'insulin_comparison',
+            'height': download_height, 'width': download_width, 'scale': download_scale
+        }
+    })
+    
+    # Analysis for each test
+    st.markdown("### Individual Test Analysis")
+    
+    for test_id, test_data in st.session_state.test_data.items():
+        if test_id in test_visibility and test_visibility[test_id]:
+            glucose = test_data['glucose']
+            insulin = test_data['insulin']
+            test_date = test_data['date']
+            
+            # Calculate results
+            glucotype, gluco_status = calculate_glucotype(glucose)
+            kraft_type, kraft_status = calculate_kraft_type(insulin, glucose)
+            metrics = calculate_metrics(glucose, insulin)
+            
+            # Determine HOMA-IR status
+            if metrics['homa_ir'] < 1.0:
+                homa_status = "normal"
+            elif metrics['homa_ir'] < 2.5:
+                homa_status = "warning"
+            else:
+                homa_status = "concern"
+            
+            # Display results for this test
+            st.markdown(f"#### {test_date}")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.markdown(f"""
+                <div class="result-box {gluco_status}">
+                    <strong>Glucotype</strong><br>
+                    {glucotype}
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown(f"""
+                <div class="result-box {kraft_status}">
+                    <strong>Kraft Pattern</strong><br>
+                    {kraft_type}
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col3:
+                st.markdown(f"""
+                <div class="result-box {homa_status}">
+                    <strong>HOMA-IR</strong><br>
+                    {metrics['homa_ir']:.2f}
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # Key metrics
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("Matsuda Index", f"{metrics['matsuda']:.1f}")
+                st.metric("Peak Glucose", f"{metrics['glucose_peak']:.0f} mg/dL")
+            
+            with col2:
+                st.metric("Peak Insulin", f"{metrics['insulin_peak']:.0f} μU/mL")
+                st.metric("Glucose AUC", f"{metrics['glucose_auc']:.0f}")
+            
+            with col3:
+                st.metric("Insulinogenic Index", f"{metrics['insulinogenic_index']:.2f}")
+                st.metric("Disposition Index", f"{metrics['disposition_index']:.2f}")
+    
+    # Test comparison table
+    if len(st.session_state.test_data) > 1:
+        st.markdown("### Test Comparison Summary")
+        
+        comparison_data = []
+        for test_id, test_data in st.session_state.test_data.items():
+            glucose = test_data['glucose']
+            insulin = test_data['insulin']
+            glucotype, _ = calculate_glucotype(glucose)
+            kraft_type, _ = calculate_kraft_type(insulin, glucose)
+            metrics = calculate_metrics(glucose, insulin)
+            
+            comparison_data.append({
+                'Date': test_data['date'],
+                'Glucotype': glucotype,
+                'Kraft Type': kraft_type,
+                'HOMA-IR': round(metrics['homa_ir'], 2),
+                'Matsuda': round(metrics['matsuda'], 1),
+                'Peak Glucose': round(metrics['glucose_peak'], 0),
+                'Peak Insulin': round(metrics['insulin_peak'], 0)
+            })
+        
+        comparison_df = pd.DataFrame(comparison_data)
+        st.dataframe(comparison_df, use_container_width=True)
+        
+        # Export all tests
+        st.markdown("### Export All Tests")
+        st.download_button(
+            "Download All Tests (CSV)",
+            comparison_df.to_csv(index=False),
+            f"ogtt_comparison_{datetime.now().strftime('%Y%m%d')}.csv",
+            "text/csv"
+        )
 
-# Add download config to the chart
-st.plotly_chart(fig1, use_container_width=True, config={
-    'displayModeBar': True,
-    'displaylogo': False,
-    'modeBarButtonsToAdd': ['downloadImage'],
-    'toImageButtonOptions': {
-        'format': 'png',
-        'filename': 'glucose_response',
-        'height': download_height,
-        'width': download_width,
-        'scale': download_scale
-    }
-})
-
-st.markdown("### Insulin Response")
-fig2 = create_clean_plot(
-    times, insulin,
-    'Insulin Response', 
-    'Insulin (μU/mL)',
-    normal_insulin,
-    'Normal',
-    insulin_color,
-    is_glucose=False
-)
-
-st.plotly_chart(fig2, use_container_width=True, config={
-    'displayModeBar': True,
-    'displaylogo': False,
-    'modeBarButtonsToAdd': ['downloadImage'],
-    'toImageButtonOptions': {
-        'format': 'png',
-        'filename': 'insulin_response',
-        'height': download_height,
-        'width': download_width,
-        'scale': download_scale
-    }
-})
-
-# Calculate results with improved algorithms
-glucotype, gluco_status = calculate_glucotype(glucose)
-kraft_type, kraft_status = calculate_kraft_type(insulin)
-metrics = calculate_metrics(glucose, insulin)
-
-# Determine HOMA-IR status with better thresholds
-if metrics['homa_ir'] < 1.0:
-    homa_status = "normal"
-elif metrics['homa_ir'] < 2.5:
-    homa_status = "warning"
 else:
-    homa_status = "concern"
+    st.info("Enter test data above or upload a CSV file to begin analysis")
 
-# Clean results display
-st.markdown("### Analysis Results")
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.markdown(f"""
-    <div class="result-box {gluco_status}">
-        <strong>Glucotype</strong><br>
-        {glucotype}
-    </div>
-    """, unsafe_allow_html=True)
-
-with col2:
-    st.markdown(f"""
-    <div class="result-box {kraft_status}">
-        <strong>Kraft Pattern</strong><br>
-        {kraft_type}
-    </div>
-    """, unsafe_allow_html=True)
-
-with col3:
-    st.markdown(f"""
-    <div class="result-box {homa_status}">
-        <strong>HOMA-IR</strong><br>
-        {metrics['homa_ir']:.2f}
-    </div>
-    """, unsafe_allow_html=True)
-
-# Enhanced metrics display
-st.markdown("### Key Metrics")
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.metric("Matsuda Index", f"{metrics['matsuda']:.1f}", help="Insulin sensitivity (higher = better)")
-    st.metric("Glucose AUC", f"{metrics['glucose_auc']:.0f}", help="Total glucose exposure")
-
-with col2:
-    st.metric("Peak Glucose", f"{metrics['glucose_peak']:.0f} mg/dL", help="Highest glucose level")
-    st.metric("Peak Insulin", f"{metrics['insulin_peak']:.0f} μU/mL", help="Highest insulin level")
-
-with col3:
-    st.metric("Insulinogenic Index", f"{metrics['insulinogenic_index']:.2f}", help="Early insulin secretion")
-    st.metric("Disposition Index", f"{metrics['disposition_index']:.2f}", help="Beta cell function")
-
-# Enhanced interpretation
-st.markdown("### Interpretation")
-
-interpretations = []
-
-# Glucose interpretation
-if gluco_status == "normal":
-    interpretations.append("✓ **Glucose handling**: Healthy biphasic response with proper peak and return to baseline")
-elif gluco_status == "warning":
-    interpretations.append("⚠ **Glucose handling**: Intermediate response pattern - may indicate early metabolic stress")
-else:
-    interpretations.append("⚠ **Glucose handling**: Concerning pattern - suggests impaired glucose metabolism")
-
-# Kraft interpretation with more detail
-if kraft_status == "normal":
-    interpretations.append("✓ **Insulin response**: Normal Kraft Type I pattern - healthy insulin dynamics")
-elif kraft_status == "warning":
-    if "Type II" in kraft_type:
-        interpretations.append("⚠ **Insulin response**: Kraft Type II - delayed insulin peak, early insulin resistance")
-    elif "Type III" in kraft_type:
-        interpretations.append("⚠ **Insulin response**: Kraft Type III - sustained insulin elevation, progressing insulin resistance")
-    else:
-        interpretations.append("⚠ **Insulin response**: Early signs of insulin dysfunction")
-else:
-    if "Type IV" in kraft_type:
-        interpretations.append("⚠ **Insulin response**: Kraft Type IV - high fasting insulin, established insulin resistance")
-    elif "Type V" in kraft_type:
-        interpretations.append("⚠ **Insulin response**: Kraft Type V - low insulin response, possible beta cell dysfunction")
-    else:
-        interpretations.append("⚠ **Insulin response**: Significant insulin dysfunction detected")
-
-# HOMA-IR interpretation
-if homa_status == "normal":
-    interpretations.append("✓ **Insulin sensitivity**: Normal HOMA-IR, good insulin sensitivity")
-elif homa_status == "warning":
-    interpretations.append("⚠ **Insulin sensitivity**: Borderline HOMA-IR (1.0-2.5), mild insulin resistance")
-else:
-    interpretations.append("⚠ **Insulin sensitivity**: Elevated HOMA-IR (>2.5), significant insulin resistance")
-
-# Additional interpretations based on new metrics
-if metrics['matsuda'] > 4.0:
-    interpretations.append("✓ **Whole body insulin sensitivity**: Excellent Matsuda Index (>4.0)")
-elif metrics['matsuda'] > 2.5:
-    interpretations.append("⚠ **Whole body insulin sensitivity**: Moderate Matsuda Index (2.5-4.0)")
-else:
-    interpretations.append("⚠ **Whole body insulin sensitivity**: Low Matsuda Index (<2.5), insulin resistance")
-
-if metrics['disposition_index'] > 1.0:
-    interpretations.append("✓ **Beta cell function**: Good disposition index, adequate insulin secretion capacity")
-else:
-    interpretations.append("⚠ **Beta cell function**: Low disposition index, may indicate beta cell stress")
-
-for interpretation in interpretations:
-    st.markdown(interpretation)
-
-# Debug information (optional - can be hidden in sidebar)
-with st.sidebar:
-    st.markdown("---")
-    if st.checkbox("Show Debug Info", value=False):
-        st.subheader("Debug Information")
-        st.write("**Raw Values:**")
-        st.write(f"Glucose: {glucose}")
-        st.write(f"Insulin: {insulin}")
-        st.write(f"**Glucose Deltas:**")
-        st.write(f"0-30min: {glucose[1] - glucose[0]:.1f}")
-        st.write(f"30-60min: {glucose[2] - glucose[1]:.1f}")
-        st.write(f"60-90min: {glucose[3] - glucose[2]:.1f}")
-        st.write(f"**Insulin Analysis:**")
-        st.write(f"Peak: {max(insulin):.1f} at {insulin.index(max(insulin)) * 30}min")
-        st.write(f"90min level: {insulin[3]:.1f}")
-
-# Simple export with enhanced data
-st.markdown("### Export Data")
-export_data = {
-    'Date': datetime.now().strftime('%Y-%m-%d'),
-    'Glucotype': glucotype,
-    'Glucotype_Status': gluco_status,
-    'Kraft_Type': kraft_type,
-    'Kraft_Status': kraft_status,
-    'HOMA_IR': round(metrics['homa_ir'], 2),
-    'HOMA_IR_Status': homa_status,
-    'Matsuda_Index': round(metrics['matsuda'], 1),
-    'Disposition_Index': round(metrics['disposition_index'], 2),
-    'Insulinogenic_Index': round(metrics['insulinogenic_index'], 2),
-    'Glucose_AUC': round(metrics['glucose_auc'], 0),
-    'Insulin_AUC': round(metrics['insulin_auc'], 0),
-    'Glucose_Peak': round(metrics['glucose_peak'], 0),
-    'Insulin_Peak': round(metrics['insulin_peak'], 0),
-    'Glucose_0': g0, 'Glucose_30': g30, 'Glucose_60': g60, 'Glucose_90': g90,
-    'Insulin_0': i0, 'Insulin_30': i30, 'Insulin_60': i60, 'Insulin_90': i90
+# CSV Template Download
+st.markdown("### CSV Template")
+template_data = {
+    'Date': ['2024-01-15', '2024-02-20'],
+    'Glucose_0': [88, 92],
+    'Glucose_30': [119, 135],
+    'Glucose_60': [92, 110],
+    'Glucose_90': [80, 85],
+    'Insulin_0': [8, 12],
+    'Insulin_30': [50, 65],
+    'Insulin_60': [70, 85],
+    'Insulin_90': [40, 45]
 }
+template_df = pd.DataFrame(template_data)
 
-df = pd.DataFrame([export_data])
 st.download_button(
-    "Download Results (CSV)",
-    df.to_csv(index=False),
-    f"ogtt_results_{datetime.now().strftime('%Y%m%d')}.csv",
-    "text/csv"
+    "Download CSV Template",
+    template_df.to_csv(index=False),
+    "ogtt_template.csv",
+    "text/csv",
+    help="Download this template to see the expected CSV format"
 )
 
 # Simple disclaimer
