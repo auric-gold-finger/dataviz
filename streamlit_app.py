@@ -177,7 +177,7 @@ with st.sidebar:
     with st.expander("Chart Appearance", expanded=True):
         line_width = st.slider("Line width", 1, 10, 4)
         marker_size = st.slider("Marker size", 4, 20, 10)
-        show_shading = st.checkbox("Show comparative shading", value=True)
+        show_shading = st.checkbox("Show comparative shading", value=False)
         show_reference = st.checkbox("Show reference line", value=True)
         show_legend = st.checkbox("Show legend", value=True)
     
