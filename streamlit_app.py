@@ -104,7 +104,7 @@ with st.sidebar:
         marker_size = st.slider("Marker size", 4, 20, 13)
         
         show_shading = st.checkbox("Show comparative shading", value=True)
-        show_reference = st.checkbox("Show reference line", value=True)
+        show_reference = st.checkbox("Show reference line", value=False)
     
     # Reference line details (collapsed by default)
     with st.expander("📏 Reference Line Details"):
