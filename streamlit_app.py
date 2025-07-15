@@ -167,7 +167,7 @@ with st.sidebar:
             st.info("Expected CSV format: Date, Glucose_0, Glucose_30, Glucose_60, Glucose_90, Insulin_0, Insulin_30, Insulin_60, Insulin_90")
     
     # Manual test input
-    num_tests = st.number_input("Number of tests:", min_value=1, max_value=10, value=2, step=1)
+    num_tests = st.number_input("Number of tests:", min_value=1, max_value=10, value=1, step=1)
     
     if st.button("Clear All Tests"):
         st.session_state.test_data = {}
