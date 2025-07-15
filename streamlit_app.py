@@ -167,7 +167,7 @@ with st.sidebar:
             st.info("Expected CSV format: Date, Glucose_0, Glucose_30, Glucose_60, Glucose_90, Insulin_0, Insulin_30, Insulin_60, Insulin_90")
     
     # Manual test input
-    num_tests = st.number_input("Number of tests:", min_value=1, max_value=10, value=2, step=1)
+    num_tests = st.number_input("Number of tests:", min_value=1, max_value=10, value=1, step=1)
     
     if st.button("Clear All Tests"):
         st.session_state.test_data = {}
@@ -200,7 +200,7 @@ with st.sidebar:
     # Annotations
     with st.expander("Annotations"):
         show_annotations = st.checkbox("Show value annotations", value=True)
-        annotation_size = st.slider("Text size", 8, 48, 12)
+        annotation_size = st.slider("Text size", 8, 48, 16)
         annotation_bold = st.checkbox("Bold text", value=True)
         annotation_color = st.color_picker("Text color", "#2c3e50")
         show_annotation_bg = st.checkbox("Show annotation background", value=False)
@@ -578,7 +578,7 @@ def create_multi_test_plot(title, y_label, reference_data, reference_name, is_gl
 if st.session_state.test_data:
     st.markdown("### Glucose Response - All Tests")
     fig1 = create_multi_test_plot(
-        'Glucose Response Comparison', 'Glucose (mg/dL)',
+        'Glucose Response', 'Glucose (mg/dL)',
         normal_glucose, 'Normal', is_glucose=True
     )
     
@@ -592,7 +592,7 @@ if st.session_state.test_data:
     
     st.markdown("### Insulin Response - All Tests")
     fig2 = create_multi_test_plot(
-        'Insulin Response Comparison', 'Insulin (μU/mL)',
+        'Insulin Response', 'Insulin (μU/mL)',
         normal_insulin, 'Normal', is_glucose=False
     )
     
