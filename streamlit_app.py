@@ -248,7 +248,7 @@ for i in range(num_tests):
             st.markdown("**Time Points (min)**")
             time_input = st.text_input(
                 "", 
-                value=", ".join(map(str, default_times)),
+                value=", ".join(map(lambda x: str(int(x)), default_times)),
                 key=f"times_{test_id}"
             )
             
@@ -256,7 +256,7 @@ for i in range(num_tests):
             st.markdown("**Glucose (mg/dL)**")
             glucose_input = st.text_input(
                 "", 
-                value=", ".join(map(str, default_glucose)),
+                value=", ".join(map(lambda x: str(int(x)), default_glucose)),
                 key=f"glucose_{test_id}"
             )
             
@@ -264,15 +264,15 @@ for i in range(num_tests):
             st.markdown("**Insulin (μU/mL)**")
             insulin_input = st.text_input(
                 "", 
-                value=", ".join(map(str, default_insulin)),
+                value=", ".join(map(lambda x: str(int(x)), default_insulin)),
                 key=f"insulin_{test_id}"
             )
         
         # Parse and auto-save data
         try:
-            times = [float(x.strip()) for x in time_input.split(',')]
-            glucose_vals = [float(x.strip()) for x in glucose_input.split(',')]
-            insulin_vals = [float(x.strip()) for x in insulin_input.split(',')]
+            times = [int(x.strip()) for x in time_input.split(',')]
+            glucose_vals = [int(x.strip()) for x in glucose_input.split(',')]
+            insulin_vals = [int(x.strip()) for x in insulin_input.split(',')]
             
             if len(times) >= 4 and len(glucose_vals) >= 4 and len(insulin_vals) >= 4:
                 # Auto-save to session state
