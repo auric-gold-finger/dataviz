@@ -26,7 +26,7 @@ st.markdown("""
 .simple-header {
     text-align: center;
     padding: 1rem 0 0.5rem 0;
-    font-family: 'Cormorant Garamond', serif;
+    font-family: 'Roman', 'Book Antiqua', 'Cormorant Garamond', 'Avenir', sans-serif;
 }
 
 .simple-header h1 {
@@ -379,7 +379,7 @@ def create_ogtt_plot(title: str, y_label: str, is_glucose: bool = True) -> go.Fi
     fig.update_layout(
         title=dict(
             text=title,
-            font=dict(family="Cormorant Garamond, serif", size=title_font_size, color='#2c3e50'),
+            font=dict(family="Roman, Book Antiqua, Cormorant Garamond, Avenir, sans-serif", size=title_font_size, color='#2c3e50'),
             x=0.5, xanchor='center'
         ),
         showlegend=show_legend,
@@ -391,12 +391,12 @@ def create_ogtt_plot(title: str, y_label: str, is_glucose: bool = True) -> go.Fi
             x=1
         ),
         xaxis=dict(
-            title=dict(text="Time (minutes)", font=dict(family="Cormorant Garamond, serif", size=axis_title_size, color='#34495e')),
+            title=dict(text="Time (minutes)", font=dict(family="Roman, Book Antiqua, Cormorant Garamond, Avenir, sans-serif", size=axis_title_size, color='#34495e')),
             tickfont=dict(family="Avenir, sans-serif", size=axis_tick_size, color='#7f8c8d'),
             showgrid=True, gridcolor='#ecf0f1', gridwidth=1
         ),
         yaxis=dict(
-            title=dict(text=y_label, font=dict(family="Cormorant Garamond, serif", size=axis_title_size, color='#34495e')),
+            title=dict(text=y_label, font=dict(family="Roman, Book Antiqua, Cormorant Garamond, Avenir, sans-serif", size=axis_title_size, color='#34495e')),
             tickfont=dict(family="Avenir, sans-serif", size=axis_tick_size, color='#7f8c8d'),
             showgrid=True, gridcolor='#ecf0f1', gridwidth=1
         ),
