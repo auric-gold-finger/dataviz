@@ -270,7 +270,7 @@ def create_ogtt_plot(title: str, y_label: str, is_glucose: bool = True) -> go.Fi
             x=ref_times,
             y=ref_values,
             mode='lines',
-            name='Normal Pattern',
+            name='Reference',
             line=dict(color=reference_color, width=reference_width, dash='dot'),
             opacity=reference_opacity
         ))
@@ -516,7 +516,7 @@ with st.sidebar:
     # Chart appearance with all original controls
     with st.expander("Chart Appearance", expanded=True):
         line_width = st.slider("Line width", 1, 10, 4)
-        marker_size = st.slider("Marker size", 4, 20, 10)
+        marker_size = st.slider("Marker size", 4, 20, 12)
         show_shading = st.checkbox("Show comparative shading", value=False)
         show_reference = st.checkbox("Show reference line", value=True)
         show_confidence = st.checkbox("Show confidence intervals", value=False)
@@ -556,7 +556,7 @@ with st.sidebar:
     # Annotations
     with st.expander("Annotations"):
         show_annotations = st.checkbox("Show value annotations", value=True)
-        annotation_size = st.slider("Text size", 8, 48, 16)
+        annotation_size = st.slider("Text size", 8, 48, 18)
         annotation_bold = st.checkbox("Bold text", value=True)
         annotation_color = st.color_picker("Text color", "#2c3e50")
         show_annotation_bg = st.checkbox("Show annotation background", value=False)
@@ -578,7 +578,7 @@ with st.sidebar:
     # Typography
     with st.expander("Typography"):
         title_font_size = st.slider("Chart title size", 12, 72, 32)
-        axis_title_size = st.slider("Axis title size", 8, 48, 20)
+        axis_title_size = st.slider("Axis title size", 8, 48, 22)
         axis_tick_size = st.slider("Axis tick size", 6, 36, 16)
         
         # Store in session state
